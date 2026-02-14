@@ -25,14 +25,14 @@ async def init_metadata_table(session: AsyncSession) -> None:
     # Ensure the main data table exists (initially empty)
     # System columns:
     # - username: Traceability field (mandatory, present in both SQL and MongoDB)
-    # - t_trans: Server timestamp (bi-temporal, join key between SQL and MongoDB)
+    # - sys_ingested_at: Server timestamp (bi-temporal, join key between SQL and MongoDB)
     # - t_stamp: Client timestamp (bi-temporal, records when event occurred)
     sql_data = """
     CREATE TABLE IF NOT EXISTS chiral_data (
         id SERIAL PRIMARY KEY,
         session_id TEXT,
         username TEXT,
-        t_trans FLOAT,
+        sys_ingested_at FLOAT,
         t_stamp FLOAT
     );
     """

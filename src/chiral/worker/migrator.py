@@ -50,10 +50,10 @@ def _ensure_system_columns(existing_columns: list[str]) -> tuple[list[str], list
         columns_to_add.append('ADD COLUMN IF NOT EXISTS "username" TEXT')
     valid_sql_cols.append("username")
 
-    # t_trans: Server timestamp (transaction time) - UNIQUE join key
-    if "t_trans" not in existing_columns:
-        columns_to_add.append('ADD COLUMN IF NOT EXISTS "t_trans" FLOAT UNIQUE')
-    valid_sql_cols.append("t_trans")
+    # sys_ingested_at: Server timestamp (transaction time) - UNIQUE join key
+    if "sys_ingested_at" not in existing_columns:
+        columns_to_add.append('ADD COLUMN IF NOT EXISTS "sys_ingested_at" FLOAT UNIQUE')
+    valid_sql_cols.append("sys_ingested_at")
 
     # t_stamp: Client timestamp (valid time)
     if "t_stamp" not in existing_columns:
@@ -75,7 +75,7 @@ def _build_schema_columns(
     columns_to_add = []
 
     for col, meta in analysis.items():
-        if col in ["session_id", "t_trans", "t_stamp", "username"]:
+        if col in ["session_id", "sys_ingested_at", "t_stamp", "username"]:
             continue
 
         if meta["target"] == "sql":
@@ -107,21 +107,21 @@ def _process_document(
 
     """
     username = doc.get("username", "unknown")
-    t_trans = doc.get("t_trans")
+    sys_ingested_at = doc.get("sys_ingested_at")
     t_stamp = doc.get("t_stamp")
 
     sql_row = {"session_id": session_id, "username": username}
     mongo_overflow = {"session_id": session_id, "username": username}
 
-    if t_trans is not None:
-        sql_row["t_trans"] = t_trans
-        mongo_overflow["t_trans"] = t_trans
+    if sys_ingested_at is not None:
+        sql_row["sys_ingested_at"] = sys_ingested_at
+        mongo_overflow["sys_ingested_at"] = sys_ingested_at
     if t_stamp is not None:
         sql_row["t_stamp"] = t_stamp
         mongo_overflow["t_stamp"] = t_stamp
 
     for key, value in doc.items():
-        if key in ["_id", "session_id", "username", "t_trans", "t_stamp"]:
+        if key in ["_id", "session_id", "username", "sys_ingested_at", "t_stamp"]:
             continue
 
         meta = analysis.get(key)
@@ -258,21 +258,21 @@ async def _process_document_incremental(
 
     """
     username = doc.get("username", "unknown")
-    t_trans = doc.get("t_trans")
+    sys_ingested_at = doc.get("sys_ingested_at")
     t_stamp = doc.get("t_stamp")
 
     sql_row = {"session_id": ctx.session_id, "username": username}
     mongo_overflow = {"session_id": ctx.session_id, "username": username}
 
-    if t_trans is not None:
-        sql_row["t_trans"] = t_trans
-        mongo_overflow["t_trans"] = t_trans
+    if sys_ingested_at is not None:
+        sql_row["sys_ingested_at"] = sys_ingested_at
+        mongo_overflow["sys_ingested_at"] = sys_ingested_at
     if t_stamp is not None:
         sql_row["t_stamp"] = t_stamp
         mongo_overflow["t_stamp"] = t_stamp
 
     for key, value in doc.items():
-        if key in ["_id", "session_id", "username", "t_trans", "t_stamp"]:
+        if key in ["_id", "session_id", "username", "sys_ingested_at", "t_stamp"]:
             continue
 
         meta = analysis.get(key)
@@ -349,8 +349,8 @@ async def migrate_column_to_mongo(
     )
 
     # 1. Fetch all existing data for this column from SQL (for this session)
-    # We need t_trans as the join key between SQL and MongoDB
-    query = text('SELECT "t_trans", "' + column_name + '" FROM "' + table_name + '" WHERE session_id = :sid')
+    # We need sys_ingested_at as the join key between SQL and MongoDB
+    query = text('SELECT "sys_ingested_at", "' + column_name + '" FROM "' + table_name + '" WHERE session_id = :sid')
     result = await sql_session.execute(query, {"sid": session_id})
     rows = result.fetchall()
 
@@ -363,12 +363,12 @@ async def migrate_column_to_mongo(
     updated_count = 0
 
     for row in rows:
-        t_trans_val = row[0]
+        sys_ingested_at_val = row[0]
         column_val = row[1]
 
-        # Find or create document in MongoDB with matching t_trans
+        # Find or create document in MongoDB with matching sys_ingested_at
         # Update it to include the column value
-        mongo_filter = {"session_id": session_id, "t_trans": t_trans_val}
+        mongo_filter = {"session_id": session_id, "sys_ingested_at": sys_ingested_at_val}
         mongo_update = {"$set": {column_name: column_val}}
 
         result = await permanent_collection.update_one(
@@ -506,7 +506,7 @@ async def migrate_incremental(
     migrated_count = 0
 
     # Build valid SQL columns list (dynamically discovered)
-    valid_sql_cols = ["session_id", "username", "t_trans", "t_stamp"]
+    valid_sql_cols = ["session_id", "username", "sys_ingested_at", "t_stamp"]
     for col, meta in analysis.items():
         if meta["target"] == "sql" and col not in valid_sql_cols:
             valid_sql_cols.append(col)
@@ -519,7 +519,7 @@ async def migrate_incremental(
         sql_row, mongo_overflow, analysis = await _process_document_incremental(doc, analysis, ctx)
 
         # Rebuild valid_sql_cols if schema changed
-        valid_sql_cols = ["session_id", "username", "t_trans", "t_stamp"]
+        valid_sql_cols = ["session_id", "username", "sys_ingested_at", "t_stamp"]
         for col, meta in analysis.items():
             if meta["target"] == "sql" and col not in valid_sql_cols:
                 valid_sql_cols.append(col)

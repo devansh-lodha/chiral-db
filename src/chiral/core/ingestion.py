@@ -64,17 +64,17 @@ async def ingest_data(
     # Metric 1: Valid Time (t_stamp) - Client timestamp
     t_stamp = data.get("t_stamp", datetime.now(tz=UTC).timestamp())
 
-    # Metric 2: Transaction Time (t_trans) - Server timestamp
+    # Metric 2: Transaction Time (sys_ingested_at) - Server timestamp
     clock = MonotonicClock.get_instance()
-    t_trans = clock.get_transaction_time()
+    sys_ingested_at = clock.get_sys_ingested_at()
 
     # 3. Insert into Shared Staging Collection in Mongo
-    # Ensure mandatory fields are present: username, t_stamp, t_trans
+    # Ensure mandatory fields are present: username, t_stamp, sys_ingested_at
     document = data.copy()
     document["session_id"] = session_id
     document["username"] = username  # Traceability: mandatory field
     document["t_stamp"] = t_stamp  # Bi-Temporal: Client timestamp (valid time)
-    document["t_trans"] = t_trans  # Bi-Temporal: Server timestamp (transaction time, join key)
+    document["sys_ingested_at"] = sys_ingested_at  # Bi-Temporal: Server timestamp (transaction time, join key)
 
     # Using single collection 'staging'
     collection = mongo_db["staging"]

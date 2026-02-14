@@ -67,7 +67,7 @@ async def analyze_staging(
     for col_name, values in columns.items():
         # Skip system columns: bi-temporal timestamps and traceability field
         # These are handled explicitly in migrator (no hardcoding of field mappings)
-        if col_name in ["t_trans", "t_stamp", "username"]:
+        if col_name in ["sys_ingested_at", "t_stamp", "username"]:
             continue
 
         # Fill missing values with None for accurate analysis if needed,

@@ -5,7 +5,7 @@
 
 """Monotonic Clock for Transaction Time generation.
 
-Implements the collision resolution strategy: t_trans = max(Clock_now, Last_assigned + epsilon).
+Implements the collision resolution strategy: sys_ingested_at = max(Clock_now, Last_assigned + epsilon).
 """
 
 import threading
@@ -32,7 +32,7 @@ class MonotonicClock:
                 raise RuntimeError(msg)
         return cast("MonotonicClock", cls._instance)
 
-    def get_transaction_time(self) -> float:
+    def get_sys_ingested_at(self) -> float:
         """Generate a unique, monotonically increasing timestamp.
 
         Returns unix timestamp as float.
@@ -42,7 +42,7 @@ class MonotonicClock:
             # Epsilon = 1 microsecond = 1e-6 (standard precision for many DBs)
             epsilon = 1e-6
 
-            t_trans = max(now, self._last_assigned + epsilon)
+            sys_ingested_at = max(now, self._last_assigned + epsilon)
 
-            self._last_assigned = t_trans
-            return t_trans
+            self._last_assigned = sys_ingested_at
+            return sys_ingested_at
