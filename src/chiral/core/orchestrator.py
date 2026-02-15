@@ -62,3 +62,14 @@ async def trigger_worker(session_id: str, *, incremental: bool = False) -> None:
                 await sql_engine.dispose()
             except Exception:
                 logger.exception("Failed to reset status")
+
+
+async def flush_staging(session_id: str) -> dict[str, int]:
+    """Force migrate any remaining data in staging for a session."""
+    logger.info("Flushing staging area for session: %s", session_id)
+    # We assume analysis is already done if we are flushing at the end.
+    # If not, one could argue we should run analysis, but for this assignment,
+    # flushing implies we are done with the stream.
+    count = await migrate_incremental(session_id=session_id)
+    logger.info("Flush complete. Processed %d remaining records.", count)
+    return {"flushed_count": count}

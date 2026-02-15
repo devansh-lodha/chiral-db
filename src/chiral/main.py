@@ -16,7 +16,7 @@ from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
 
 from chiral.core.ingestion import ingest_data
-from chiral.core.orchestrator import trigger_worker
+from chiral.core.orchestrator import flush_staging, trigger_worker
 
 app = FastAPI(title="Chiral DB Assignment")
 
@@ -25,6 +25,12 @@ class IngestRequest(BaseModel):
     """Request model for data ingestion endpoint."""
 
     data: dict[str, Any]
+
+
+@app.post("/flush/{session_id}")
+async def flush_endpoint(session_id: str) -> dict[str, int]:
+    """Endpoint to force flush staging data."""
+    return await flush_staging(session_id)
 
 
 @app.post("/ingest")

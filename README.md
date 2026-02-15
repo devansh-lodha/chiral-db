@@ -14,12 +14,22 @@
 
 ## 1. Quick Start (Evaluator Mode)
 
-We have automated the environment setup, execution, simulation, and verification into a single command.
-
 ### Prerequisites
 *   **Docker** (Must be running)
 *   **Just** (`brew install just` or `apt install just`)
 *   **uv** (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+
+### Setup Configuration
+Before running the demo, create the environment file:
+```bash
+cp .env.example .env
+# OR manually create .env with:
+# POSTGRES_USER=chiral
+# POSTGRES_PASSWORD=chiral
+# POSTGRES_DB=chiral_db
+# MONGO_INITDB_ROOT_USERNAME=admin
+# MONGO_INITDB_ROOT_PASSWORD=admin
+```
 
 ### Run the Demo
 The following command will wipe previous data, start the containers, launch the API, run the TA's simulation server, ingest 1000 records, and automatically print a **Verification Report**.
@@ -45,13 +55,14 @@ just down
 ### 1. Normalization Strategy
 **Q: How did you resolve type naming ambiguities? What rules did you follow to ensure they didn’t create duplicate columns?**
 
-**A:** We implemented a **Type Inference & Mapping Strategy** to resolve ambiguities between JSON types and SQL column definitions.
-*   **Type Normalization:** We map disparate Python/JSON types to standard SQL ISO types:
+**A:**
+*   **Attribute Naming:** Per the instructor's specific clarification for this assignment, we treat casing differences (e.g., `ip` vs `IP` vs `IpAddress`) as **distinct logical attributes**. We do not normalize them into a single column (e.g., `ip_address`). This preserves the exact semantics of the incoming stream.
+*   **Type Normalization:** We map disparate Python/JSON value types to standard SQL ISO types:
     *   `int` $\rightarrow$ `INTEGER`
     *   `float` $\rightarrow$ `DOUBLE PRECISION`
     *   `bool` $\rightarrow$ `BOOLEAN`
     *   `str` $\rightarrow$ `TEXT`
-*   **Duplicate Prevention:** We enforce a strict **1-to-1 mapping** between a logical attribute and a physical column. We do *not* create duplicate or versioned columns (e.g., `age_int`, `age_string`) when type ambiguities occur. Instead, if a field's type becomes ambiguous (e.g., `int` vs `float` conflict), the system uses **Shannon Entropy** to determine placement. If the ambiguity implies instability, the attribute is routed to MongoDB rather than creating a duplicate column in PostgreSQL.
+*   **Duplicate Prevention:** We enforce a strict **1-to-1 mapping** between a logical attribute key and a physical column. We do *not* create versioned columns (e.g., `age_int`, `age_string`). If a specific attribute key (e.g., `age`) changes type mid-stream (Type Drift), we do not create a second column; instead, we migrate the attribute to MongoDB (see Question 5).
 
 ### 2. Placement Heuristics
 **Q: What specific thresholds (e.g., frequency %) were used to decide between SQL and MongoDB?**

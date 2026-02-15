@@ -45,9 +45,18 @@ clean:
 
 # Run the full end-to-end demo
 demo:
-    @echo "Wiping existing data for a clean start..."
+    @if [ ! -f .env ]; then echo "Error: .env file not found. Please run 'cp .env.example .env'"; exit 1; fi
+    
+    @echo "Cleaning up old instances..."
     docker compose down -v
+    @bash -c "pkill -f '[u]vicorn' 2>/dev/null || true"
+    @rm -f chiral.log simulation.log
+
+    @echo "Checking for remaining port conflicts..."
+    @uv run python check_ports.py || (echo "ERROR: Ports occupied. Run 'just stop-ports' or stop local DBs." && exit 1)
+    
     @echo "Starting Databases..."
+    docker compose up -d
     docker compose up -d
     @echo "Starting Chiral API & Simulation..."
     @bash -c "pkill -f '[u]vicorn' 2>/dev/null || true"
@@ -61,9 +70,19 @@ demo:
     @nohup uv run uvicorn simulation_code:app --port 8001 > simulation.log 2>&1 &
     @echo "Simulation started on :8001"
 
-    @echo "Waiting 10s for services to initialize..."
-    @echo "Waiting for Simulation to be ready..."
+    @echo "Waiting for services to initialize..."
+    
+    @echo "1. Waiting for Databases..."
+    @bash -c "count=0; until uv run python verify_connections.py >/dev/null 2>&1; do sleep 1; count=\$((count+1)); if [ \$count -ge 30 ]; then echo 'Timeout waiting for DBs'; exit 1; fi; done"
+    @echo "   Databases are ready."
+
+    @echo "2. Waiting for Chiral API..."
+    @bash -c "count=0; until curl -s http://127.0.0.1:8000/ > /dev/null; do sleep 1; count=\$((count+1)); if [ \$count -ge 30 ]; then echo 'Timeout waiting for API'; exit 1; fi; done"
+    @echo "   Chiral API is ready."
+
+    @echo "3. Waiting for Simulation..."
     @bash -c "until curl -s http://127.0.0.1:8001/health > /dev/null; do sleep 1; done"
+    @echo "   Simulation is ready."
 
     @echo "Running Data Feeder..."
     @uv run python feed_data.py
@@ -80,6 +99,13 @@ demo:
 stop:
     pkill -f uvicorn || true
     @echo "Servers stopped."
+
+# Force kill processes on ports 8000/8001
+stop-ports:
+    @echo "Attempting to free ports 8000 and 8001..."
+    @lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+    @lsof -ti :8001 | xargs kill -9 2>/dev/null || true
+    @echo "Ports 8000/8001 freed."
 
 # View logs
 logs:

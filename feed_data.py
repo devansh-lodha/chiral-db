@@ -15,6 +15,7 @@ import httpx
 SIMULATION_URL = "http://127.0.0.1:8001/record/1000"
 CHIRAL_API_URL = "http://127.0.0.1:8000/ingest"
 SESSION_ID = "session_assignment_1"
+FLUSH_API_URL = f"http://127.0.0.1:8000/flush/{SESSION_ID}"
 SUCCESS_STATUS = 200
 LOG_INTERVAL = 100
 
@@ -52,6 +53,15 @@ async def feed() -> None:
                         logger.exception("[Feeder] Exception processing line")
 
         logger.info("[Feeder] Finished. Total records sent: %d", count)
+
+        # --- NEW: Flush remaining data ---
+        logger.info("[Feeder] Sending Flush Signal to ensure zero data loss...")
+        resp = await client.post(FLUSH_API_URL)
+        if resp.status_code == SUCCESS_STATUS:
+            logger.info("[Feeder] Flush successful: %s", resp.json())
+        else:
+            logger.error("[Feeder] Flush failed: %s", resp.text)
+        # ---------------------------------
 
 
 if __name__ == "__main__":

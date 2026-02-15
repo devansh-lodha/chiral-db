@@ -444,6 +444,7 @@ async def migrate_data(
 
     # Process documents
     cursor = staging_collection.find({"session_id": session_id})
+    processed_ids = []
     async for doc in cursor:
         sql_row, mongo_overflow = _process_document(doc, session_id, analysis)
 
@@ -455,8 +456,12 @@ async def migrate_data(
         if len(mongo_overflow) > 1:
             await mongo_db["permanent"].insert_one(mongo_overflow)
 
+        processed_ids.append(doc["_id"])
+
     # Cleanup and update status
-    await staging_collection.delete_many({"session_id": session_id})
+    if processed_ids:
+        await staging_collection.delete_many({"_id": {"$in": processed_ids}})
+
     schema_json = json.dumps(analysis)
     await sql_session.execute(
         text("UPDATE session_metadata SET status = 'migrated', schema_json = :schema WHERE session_id = :sid"),
@@ -515,6 +520,7 @@ async def migrate_incremental(
     ctx = _IncrementalMigrationContext(session_id, table_name, sql_session, mongo_db)
 
     # Process each document
+    processed_ids = []
     for doc in docs:
         sql_row, mongo_overflow, analysis = await _process_document_incremental(doc, analysis, ctx)
 
@@ -533,9 +539,12 @@ async def migrate_incremental(
             await mongo_db["permanent"].insert_one(mongo_overflow)
 
         migrated_count += 1
+        processed_ids.append(doc["_id"])
 
     # Cleanup staging
-    await staging_collection.delete_many({"session_id": session_id})
+    if processed_ids:
+        await staging_collection.delete_many({"_id": {"$in": processed_ids}})
+
     await sql_session.execute(
         text("UPDATE session_metadata SET status = 'migrated' WHERE session_id = :sid"),
         {"sid": session_id},
