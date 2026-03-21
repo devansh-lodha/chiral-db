@@ -5,6 +5,7 @@
 
 """Primary key, foreign key, and uniqueness constraint policies."""
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -50,6 +51,90 @@ class TableKeySpec:
         """Validate and normalize spec."""
         if self.foreign_keys is None:
             object.__setattr__(self, "foreign_keys", [])
+
+
+IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def normalize_identifier(raw: str) -> str:
+    """Normalize arbitrary text into a SQL-safe identifier-like token."""
+    normalized_chars = []
+    for char in raw.lower():
+        if char.isalnum() or char == "_":
+            normalized_chars.append(char)
+        else:
+            normalized_chars.append("_")
+
+    normalized = "".join(normalized_chars).strip("_")
+    if not normalized:
+        normalized = "entity"
+    if normalized[0].isdigit():
+        normalized = f"e_{normalized}"
+    return normalized
+
+
+def build_dynamic_child_table_name(parent_table: str, source_field: str) -> str:
+    """Build deterministic child table name for decomposed repeating entities."""
+    return f"{normalize_identifier(parent_table)}_{normalize_identifier(source_field)}"
+
+
+def build_dynamic_child_key_spec(
+    *,
+    parent_table: str,
+    source_field: str,
+    parent_pk_column: str = "id",
+    parent_pk_type: str = "SERIAL",
+    include_session_fk: bool = True,
+    session_parent_table: str = "session_metadata",
+    session_parent_column: str = "session_id",
+) -> TableKeySpec:
+    """Create key policy for generated child table.
+
+    Child tables use surrogate PK and mandatory parent FK.
+    Optionally include session FK for efficient session-scoped queries.
+    """
+    child_table = build_dynamic_child_table_name(parent_table, source_field)
+
+    if not IDENTIFIER_RE.fullmatch(parent_table):
+        msg = f"Invalid parent table name: {parent_table}"
+        raise ValueError(msg)
+    if not IDENTIFIER_RE.fullmatch(parent_pk_column):
+        msg = f"Invalid parent PK column: {parent_pk_column}"
+        raise ValueError(msg)
+    if include_session_fk and not IDENTIFIER_RE.fullmatch(session_parent_table):
+        msg = f"Invalid session parent table: {session_parent_table}"
+        raise ValueError(msg)
+    if include_session_fk and not IDENTIFIER_RE.fullmatch(session_parent_column):
+        msg = f"Invalid session parent column: {session_parent_column}"
+        raise ValueError(msg)
+
+    parent_fk_column = f"{normalize_identifier(parent_table)}_{normalize_identifier(parent_pk_column)}"
+    foreign_keys: list[dict[str, str]] = [
+        {
+            "local_column": parent_fk_column,
+            "referenced_table": parent_table,
+            "referenced_column": parent_pk_column,
+            "on_delete": "CASCADE",
+        }
+    ]
+
+    if include_session_fk:
+        foreign_keys.append(
+            {
+                "local_column": "session_id",
+                "referenced_table": session_parent_table,
+                "referenced_column": session_parent_column,
+                "on_delete": "CASCADE",
+            }
+        )
+
+    primary_key_type = "BIGSERIAL" if parent_pk_type.upper() == "BIGSERIAL" else "SERIAL"
+    return TableKeySpec(
+        table_name=child_table,
+        primary_key_column="id",
+        primary_key_type=primary_key_type,
+        foreign_keys=foreign_keys,
+    )
 
 
 # Canonical key specs for chiral-db tables

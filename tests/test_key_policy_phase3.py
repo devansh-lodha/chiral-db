@@ -10,7 +10,10 @@ from src.chiral.domain.key_policy import (
     SESSION_METADATA_KEY_SPEC,
     STAGING_DATA_KEY_SPEC,
     KeyPolicy,
+    build_dynamic_child_key_spec,
+    build_dynamic_child_table_name,
     get_key_spec_for_table,
+    normalize_identifier,
 )
 
 
@@ -65,3 +68,48 @@ def test_foreign_key_specs_reference_correct_columns() -> None:
     assert chiral_fk["referenced_table"] == "session_metadata"
     assert chiral_fk["referenced_column"] == "session_id"
     assert chiral_fk["on_delete"] == "CASCADE"
+
+
+def test_dynamic_child_table_name_is_deterministic() -> None:
+    """Dynamic table names should be normalized and deterministic."""
+    assert build_dynamic_child_table_name("chiral_data", "comments") == "chiral_data_comments"
+    assert build_dynamic_child_table_name("Chiral Data", "Comment-Items") == "chiral_data_comment_items"
+
+
+def test_normalize_identifier_handles_edge_cases() -> None:
+    """Identifier normalization should avoid invalid starts and empty names."""
+    assert normalize_identifier("123") == "e_123"
+    assert normalize_identifier("!!!") == "entity"
+
+
+def test_dynamic_child_key_spec_contains_parent_and_session_fks() -> None:
+    """Generated child key spec should include surrogate PK plus parent/session FKs."""
+    spec = build_dynamic_child_key_spec(parent_table="chiral_data", source_field="comments")
+
+    assert spec.table_name == "chiral_data_comments"
+    assert spec.primary_key_column == "id"
+    assert spec.primary_key_type == "SERIAL"
+    assert len(spec.foreign_keys) == 2
+
+    parent_fk = spec.foreign_keys[0]
+    assert parent_fk["local_column"] == "chiral_data_id"
+    assert parent_fk["referenced_table"] == "chiral_data"
+    assert parent_fk["referenced_column"] == "id"
+
+    session_fk = spec.foreign_keys[1]
+    assert session_fk["local_column"] == "session_id"
+    assert session_fk["referenced_table"] == "session_metadata"
+    assert session_fk["referenced_column"] == "session_id"
+
+
+def test_dynamic_child_key_spec_can_skip_session_fk() -> None:
+    """Optional session FK should be configurable for future variants."""
+    spec = build_dynamic_child_key_spec(
+        parent_table="chiral_data",
+        source_field="events",
+        include_session_fk=False,
+    )
+
+    assert spec.table_name == "chiral_data_events"
+    assert len(spec.foreign_keys) == 1
+    assert spec.foreign_keys[0]["referenced_table"] == "chiral_data"

@@ -41,6 +41,20 @@ class JsonbStrategyDecision:
     strategy_rule: str
 
 
+@dataclass(frozen=True)
+class RepeatingEntityDecision:
+    """Deterministic repeating-entity detection result for normalization planning."""
+
+    source_field: str
+    child_table: str
+    relationship: str
+    occurrence_ratio: float
+    homogeneity_ratio: float
+    average_cardinality: float
+    child_columns: list[str]
+    reason: str
+
+
 def _value_to_inferred_type(value: Any) -> str:
     """Map Python values to normalized analysis type names."""
     type_map = {
@@ -199,3 +213,111 @@ def decide_storage_target(
         policy=policy,
     )
     return decision.target, decision.routing_reason
+
+
+def _normalize_identifier(raw: str) -> str:
+    normalized_chars = []
+    for char in raw.lower():
+        if char.isalnum() or char == "_":
+            normalized_chars.append(char)
+        else:
+            normalized_chars.append("_")
+
+    normalized = "".join(normalized_chars).strip("_")
+    if not normalized:
+        return "entity"
+    if normalized[0].isdigit():
+        return f"e_{normalized}"
+    return normalized
+
+
+def detect_repeating_entities(
+    docs: list[dict[str, Any]],
+    *,
+    parent_table: str = "chiral_data",
+    min_occurrence_ratio: float = 0.2,
+    min_homogeneity_ratio: float = 0.7,
+    min_average_cardinality: float = 1.0,
+    stable_key_ratio_threshold: float = 0.6,
+) -> list[RepeatingEntityDecision]:
+    """Detect one-to-many repeating entities from array-of-object fields."""
+    if not docs:
+        return []
+
+    total_docs = len(docs)
+    stats: dict[str, dict[str, Any]] = {}
+
+    for doc in docs:
+        for key, value in doc.items():
+            if not isinstance(value, list):
+                continue
+
+            field_stats = stats.setdefault(
+                key,
+                {
+                    "occurrence_docs": 0,
+                    "homogeneous_docs": 0,
+                    "total_items": 0,
+                    "key_counts": {},
+                },
+            )
+
+            if not value:
+                continue
+
+            if not all(isinstance(item, dict) for item in value):
+                continue
+
+            field_stats["occurrence_docs"] += 1
+            field_stats["total_items"] += len(value)
+
+            item_key_sets = [set(item.keys()) for item in value]
+            if item_key_sets and all(keys == item_key_sets[0] for keys in item_key_sets):
+                field_stats["homogeneous_docs"] += 1
+
+            for item in value:
+                for item_key in item:
+                    key_counts = field_stats["key_counts"]
+                    key_counts[item_key] = key_counts.get(item_key, 0) + 1
+
+    decisions: list[RepeatingEntityDecision] = []
+    normalized_parent = _normalize_identifier(parent_table)
+
+    for source_field, field_stats in sorted(stats.items()):
+        occurrence_docs = field_stats["occurrence_docs"]
+        if occurrence_docs == 0:
+            continue
+
+        occurrence_ratio = occurrence_docs / total_docs
+        homogeneity_ratio = field_stats["homogeneous_docs"] / occurrence_docs
+        average_cardinality = field_stats["total_items"] / occurrence_docs
+
+        if occurrence_ratio < min_occurrence_ratio:
+            continue
+        if homogeneity_ratio < min_homogeneity_ratio:
+            continue
+        if average_cardinality < min_average_cardinality:
+            continue
+
+        total_item_rows = field_stats["total_items"]
+        child_columns = []
+        for item_key, seen_count in sorted(field_stats["key_counts"].items()):
+            key_ratio = seen_count / max(1, total_item_rows)
+            if key_ratio >= stable_key_ratio_threshold:
+                child_columns.append(item_key)
+
+        child_table = f"{normalized_parent}_{_normalize_identifier(source_field)}"
+        decisions.append(
+            RepeatingEntityDecision(
+                source_field=source_field,
+                child_table=child_table,
+                relationship="one_to_many",
+                occurrence_ratio=occurrence_ratio,
+                homogeneity_ratio=homogeneity_ratio,
+                average_cardinality=average_cardinality,
+                child_columns=child_columns,
+                reason="homogeneous_array_of_objects",
+            )
+        )
+
+    return decisions

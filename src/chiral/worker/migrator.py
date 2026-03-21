@@ -10,25 +10,168 @@ import logging
 import os
 import re
 import time
+from collections.abc import Iterator
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chiral.db.metadata_store import apply_drift_to_metadata, bounded_append_events, load_metadata_snapshot
+from chiral.db.metadata_store import (
+    apply_decomposition_plan_to_metadata,
+    apply_drift_to_metadata,
+    bounded_append_events,
+    load_metadata_snapshot,
+)
 from chiral.db.observability import (
     build_guardrail_event,
     build_migration_metrics,
     should_guardrail_route_to_jsonb,
 )
 from chiral.db.performance import calculate_rows_per_second, chunked
+from chiral.db.schema import get_decomposition_plan, materialize_decomposition_tables
 from chiral.db.sessions import session
-from chiral.domain.key_policy import KeyPolicy
+from chiral.domain.key_policy import KeyPolicy, build_dynamic_child_key_spec, normalize_identifier
 from chiral.domain.routing import is_sql_target
 
 logger = logging.getLogger(__name__)
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+ANALYSIS_METADATA_KEY = "__analysis_metadata__"
+
+
+def _iter_field_analysis(analysis: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield only concrete field-analysis entries, excluding metadata envelopes."""
+    for col, meta in analysis.items():
+        if col == ANALYSIS_METADATA_KEY:
+            continue
+        if not isinstance(meta, dict):
+            continue
+        if "target" not in meta:
+            continue
+        yield col, meta
+
+
+def _extract_decomposed_child_items(
+    doc: dict[str, Any],
+    entities: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[tuple[dict[str, Any], dict[str, Any]]]]:
+    """Split source document into parent doc and child entity rows."""
+    parent_doc = dict(doc)
+    extracted: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+    for entity in entities:
+        source_field = entity.get("source_field")
+        if not isinstance(source_field, str) or source_field not in parent_doc:
+            continue
+
+        raw_child_value = parent_doc.pop(source_field)
+        if isinstance(raw_child_value, list):
+            extracted.extend((entity, item) for item in raw_child_value if isinstance(item, dict))
+        elif isinstance(raw_child_value, dict):
+            extracted.append((entity, raw_child_value))
+
+    return parent_doc, extracted
+
+
+def _coerce_child_scalar_for_text_column(value: Any) -> Any:
+    """Coerce child scalar values to match dynamically-created TEXT columns."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _build_child_insert_payload(
+    *,
+    parent_table: str,
+    session_id: str,
+    parent_id: int,
+    entity: dict[str, Any],
+    child_doc: dict[str, Any],
+) -> tuple[str, dict[str, Any]] | None:
+    """Build child row payload with FK linkage and overflow fallback."""
+    source_field = entity.get("source_field")
+    if not isinstance(source_field, str) or not source_field:
+        return None
+
+    key_spec = build_dynamic_child_key_spec(
+        parent_table=parent_table,
+        source_field=source_field,
+        parent_pk_column="id",
+        parent_pk_type="SERIAL",
+        include_session_fk=True,
+    )
+
+    child_table = key_spec.table_name
+    parent_fk_column = key_spec.foreign_keys[0]["local_column"]
+
+    child_columns = entity.get("child_columns", [])
+    normalized_child_columns = {normalize_identifier(column) for column in child_columns if isinstance(column, str)}
+
+    payload: dict[str, Any] = {
+        parent_fk_column: parent_id,
+        "session_id": session_id,
+    }
+    overflow: dict[str, Any] = {}
+
+    for key, value in child_doc.items():
+        normalized_key = normalize_identifier(key)
+        if normalized_key in normalized_child_columns and not isinstance(value, (dict, list)):
+            payload[normalized_key] = _coerce_child_scalar_for_text_column(value)
+        else:
+            overflow[key] = value
+
+    payload["overflow_data"] = json.dumps(overflow) if overflow else "{}"
+    return child_table, payload
+
+
+async def _insert_row_returning_id(
+    *,
+    table_name: str,
+    payload: dict[str, Any],
+    sql_session: AsyncSession,
+) -> int:
+    """Insert a row and return generated id."""
+    if not IDENTIFIER_RE.fullmatch(table_name):
+        msg = f"Invalid table name: {table_name}"
+        raise ValueError(msg)
+
+    for key in payload:
+        if not IDENTIFIER_RE.fullmatch(key):
+            msg = f"Invalid column name: {key}"
+            raise ValueError(msg)
+
+    insert_keys = list(payload.keys())
+    col_list = ", ".join([f'"{key}"' for key in insert_keys])
+    bind_list = ", ".join([f":{key}" for key in insert_keys])
+    insert_stmt = text(f'INSERT INTO "{table_name}" ({col_list}) VALUES ({bind_list}) RETURNING id')
+    result = await sql_session.execute(insert_stmt, payload)
+    inserted_id = result.scalar_one()
+    return int(inserted_id)
+
+
+async def _insert_dynamic_row(
+    *,
+    table_name: str,
+    payload: dict[str, Any],
+    sql_session: AsyncSession,
+) -> None:
+    """Insert a dynamic row payload into target table."""
+    if not IDENTIFIER_RE.fullmatch(table_name):
+        msg = f"Invalid table name: {table_name}"
+        raise ValueError(msg)
+
+    for key in payload:
+        if not IDENTIFIER_RE.fullmatch(key):
+            msg = f"Invalid column name: {key}"
+            raise ValueError(msg)
+
+    insert_keys = list(payload.keys())
+    col_list = ", ".join([f'"{key}"' for key in insert_keys])
+    bind_list = ", ".join([f":{key}" for key in insert_keys])
+    insert_stmt = text(f'INSERT INTO "{table_name}" ({col_list}) VALUES ({bind_list})')
+    await sql_session.execute(insert_stmt, payload)
 
 
 def cast_value(value: object, expected_type: str) -> object:
@@ -92,7 +235,7 @@ def _build_schema_columns(
 
     columns_to_add = []
 
-    for col, meta in analysis.items():
+    for col, meta in _iter_field_analysis(analysis):
         if col in ["session_id", "sys_ingested_at", "t_stamp", "username"]:
             continue
 
@@ -524,6 +667,7 @@ async def migrate_data(
     max_field_bytes = max(128, int(os.getenv("GUARDRAIL_MAX_FIELD_BYTES", "65536")))
     max_nesting_depth = max(1, int(os.getenv("GUARDRAIL_MAX_NESTING_DEPTH", "8")))
     max_safety_events = max(1, int(os.getenv("GUARDRAIL_MAX_SAFETY_EVENTS_PER_SESSION", "500")))
+    max_drift_events = max(1, int(os.getenv("GUARDRAIL_MAX_DRIFT_EVENTS_PER_SESSION", "200")))
     started = time.perf_counter()
 
     # Build key policy from environment
@@ -552,6 +696,8 @@ async def migrate_data(
             logger.exception("Schema Evolution Failed")
             return
 
+    await materialize_decomposition_tables(sql_session, analysis, parent_table=table_name)
+
     # Read staging documents from PostgreSQL staging_data table
     staging_result = await sql_session.execute(
         text("SELECT id, data FROM staging_data WHERE session_id = :sid"),
@@ -559,8 +705,13 @@ async def migrate_data(
     )
     staging_rows = staging_result.fetchall()
 
+    decomposition_plan = get_decomposition_plan(analysis)
+    decomposition_entities = decomposition_plan.get("entities", [])
+    use_decomposition = isinstance(decomposition_entities, list) and len(decomposition_entities) > 0
+
     processed_ids = []
     pending_inserts: list[dict[str, Any]] = []
+    child_insert_count = 0
     safety_events: list[dict[str, Any]] = []
     total_key_count = 0
     overflow_key_count = 0
@@ -573,8 +724,10 @@ async def migrate_data(
         data_keys = [k for k in doc if k not in ["_id", "session_id", "username", "sys_ingested_at", "t_stamp"]]
         total_key_count += len(data_keys)
 
+        parent_doc, extracted_children = _extract_decomposed_child_items(doc, decomposition_entities)
+
         sql_row, overflow = _process_document(
-            doc,
+            parent_doc,
             session_id,
             analysis,
             max_field_bytes=max_field_bytes,
@@ -582,15 +735,44 @@ async def migrate_data(
             safety_events=safety_events,
         )
         overflow_key_count += len(overflow)
-        insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
-        if insert_payload:
-            pending_inserts.append(insert_payload)
+
+        if use_decomposition:
+            insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
+            if insert_payload:
+                parent_id = await _insert_row_returning_id(
+                    table_name=table_name,
+                    payload=insert_payload,
+                    sql_session=sql_session,
+                )
+                for entity, child_doc in extracted_children:
+                    child_insert = _build_child_insert_payload(
+                        parent_table=table_name,
+                        session_id=session_id,
+                        parent_id=parent_id,
+                        entity=entity,
+                        child_doc=child_doc,
+                    )
+                    if not child_insert:
+                        continue
+                    child_table, child_payload = child_insert
+                    await _insert_dynamic_row(
+                        table_name=child_table,
+                        payload=child_payload,
+                        sql_session=sql_session,
+                    )
+                    child_insert_count += 1
+        else:
+            insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
+            if insert_payload:
+                pending_inserts.append(insert_payload)
 
         processed_ids.append(staging_id)
 
     inserted_count = 0
-    if pending_inserts:
+    if pending_inserts and not use_decomposition:
         inserted_count = await _bulk_insert_sql_rows(pending_inserts, table_name, sql_session, batch_size)
+    elif use_decomposition:
+        inserted_count = len(processed_ids)
 
     # Cleanup staging
     if processed_ids:
@@ -599,13 +781,34 @@ async def migrate_data(
         params = {f"id_{i}": pid for i, pid in enumerate(processed_ids)}
         await sql_session.execute(delete_sql, params)
 
-    schema_json = json.dumps(analysis)
+    snapshot = await load_metadata_snapshot(sql_session, session_id)
+    previous_plan = None
+    if snapshot:
+        previous_metadata = snapshot.schema.get(ANALYSIS_METADATA_KEY, {})
+        if isinstance(previous_metadata, dict):
+            previous_plan = previous_metadata.get("decomposition_plan")
+
+    decomposition_plan = get_decomposition_plan(analysis)
+    existing_drift_events = snapshot.drift_events if snapshot else []
+    persisted_schema, updated_drift_events, schema_version_increment = apply_decomposition_plan_to_metadata(
+        schema=analysis,
+        drift_events=existing_drift_events,
+        decomposition_plan=decomposition_plan,
+        previous_decomposition_plan=previous_plan,
+    )
+    bounded_drift_events = bounded_append_events(
+        existing_drift_events, updated_drift_events[len(existing_drift_events) :], max_drift_events
+    )
+    base_schema_version = snapshot.schema_version if snapshot else 1
+    schema_json = json.dumps(persisted_schema)
+
     await sql_session.execute(
         text(
             "UPDATE session_metadata "
             "SET status = 'migrated', "
             "    schema_json = :schema, "
-            "    schema_version = COALESCE(schema_version, 1), "
+            "    schema_version = :schema_version, "
+            "    drift_events = CAST(:drift_events AS jsonb), "
             "    safety_events = COALESCE(safety_events, '[]'::jsonb) || CAST(:safety_events AS jsonb), "
             "    migration_metrics = COALESCE(migration_metrics, '[]'::jsonb) || CAST(:metrics AS jsonb) "
             "WHERE session_id = :sid"
@@ -613,6 +816,8 @@ async def migrate_data(
         {
             "sid": session_id,
             "schema": schema_json,
+            "schema_version": base_schema_version + schema_version_increment,
+            "drift_events": json.dumps(bounded_drift_events),
             "safety_events": json.dumps(bounded_append_events([], safety_events, max_safety_events)),
             "metrics": json.dumps([]),
         },
@@ -623,7 +828,7 @@ async def migrate_data(
     metrics = build_migration_metrics(
         phase="full",
         rows_processed=len(staging_rows),
-        rows_inserted=inserted_count,
+        rows_inserted=inserted_count + child_insert_count,
         rows_per_second=rows_per_second,
         overflow_key_count=overflow_key_count,
         total_key_count=total_key_count,
@@ -689,6 +894,10 @@ async def migrate_incremental(
     if not staging_rows:
         return 0
 
+    decomposition_plan = get_decomposition_plan(analysis)
+    decomposition_entities = decomposition_plan.get("entities", [])
+    use_decomposition = isinstance(decomposition_entities, list) and len(decomposition_entities) > 0
+
     table_name = "chiral_data"
     migrated_count = 0
     batch_size = max(1, int(os.getenv("MIGRATION_INSERT_BATCH_SIZE", "100")))
@@ -701,7 +910,7 @@ async def migrate_incremental(
 
     # Build valid SQL columns list
     valid_sql_cols = ["session_id", "username", "sys_ingested_at", "t_stamp"]
-    for col, meta in analysis.items():
+    for col, meta in _iter_field_analysis(analysis):
         if is_sql_target(meta["target"]) and col not in valid_sql_cols:
             valid_sql_cols.append(col)
 
@@ -709,6 +918,7 @@ async def migrate_incremental(
 
     processed_ids = []
     pending_inserts: list[dict[str, Any]] = []
+    child_insert_count = 0
     safety_events: list[dict[str, Any]] = []
     total_key_count = 0
     overflow_key_count = 0
@@ -723,8 +933,10 @@ async def migrate_incremental(
         total_key_count += len(data_keys)
 
         before_drift_count = len(snapshot.drift_events) if snapshot else 0
+        parent_doc, extracted_children = _extract_decomposed_child_items(doc, decomposition_entities)
+
         sql_row, overflow, analysis = await _process_document_incremental(
-            doc,
+            parent_doc,
             analysis,
             ctx,
             max_field_bytes=max_field_bytes,
@@ -741,20 +953,48 @@ async def migrate_incremental(
 
         # Rebuild valid_sql_cols if schema changed
         valid_sql_cols = ["session_id", "username", "sys_ingested_at", "t_stamp"]
-        for col, meta in analysis.items():
+        for col, meta in _iter_field_analysis(analysis):
             if is_sql_target(meta["target"]) and col not in valid_sql_cols:
                 valid_sql_cols.append(col)
 
-        insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
-        if insert_payload:
-            pending_inserts.append(insert_payload)
+        if use_decomposition:
+            insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
+            if insert_payload:
+                parent_id = await _insert_row_returning_id(
+                    table_name=table_name,
+                    payload=insert_payload,
+                    sql_session=sql_session,
+                )
+                for entity, child_doc in extracted_children:
+                    child_insert = _build_child_insert_payload(
+                        parent_table=table_name,
+                        session_id=session_id,
+                        parent_id=parent_id,
+                        entity=entity,
+                        child_doc=child_doc,
+                    )
+                    if not child_insert:
+                        continue
+                    child_table, child_payload = child_insert
+                    await _insert_dynamic_row(
+                        table_name=child_table,
+                        payload=child_payload,
+                        sql_session=sql_session,
+                    )
+                    child_insert_count += 1
+        else:
+            insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
+            if insert_payload:
+                pending_inserts.append(insert_payload)
 
         migrated_count += 1
         processed_ids.append(staging_id)
 
     inserted_count = 0
-    if pending_inserts:
+    if pending_inserts and not use_decomposition:
         inserted_count = await _bulk_insert_sql_rows(pending_inserts, table_name, sql_session, batch_size)
+    elif use_decomposition:
+        inserted_count = len(processed_ids)
 
     # Cleanup staging
     if processed_ids:
@@ -768,7 +1008,7 @@ async def migrate_incremental(
     metrics = build_migration_metrics(
         phase="incremental",
         rows_processed=migrated_count,
-        rows_inserted=inserted_count,
+        rows_inserted=inserted_count + child_insert_count,
         rows_per_second=rows_per_second,
         overflow_key_count=overflow_key_count,
         total_key_count=total_key_count,

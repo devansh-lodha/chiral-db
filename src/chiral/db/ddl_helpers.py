@@ -6,11 +6,44 @@
 """Idempotent DDL helpers for safe schema evolution."""
 
 import logging
+import re
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _normalize_identifier(raw: str) -> str:
+    normalized_chars = []
+    for char in raw.lower():
+        if char.isalnum() or char == "_":
+            normalized_chars.append(char)
+        else:
+            normalized_chars.append("_")
+
+    normalized = "".join(normalized_chars).strip("_")
+    if not normalized:
+        normalized = "entity"
+    if normalized[0].isdigit():
+        normalized = f"e_{normalized}"
+    return normalized
+
+
+def build_fk_constraint_name(table_name: str, local_column: str, referenced_table: str) -> str:
+    """Build deterministic FK constraint name."""
+    name = (
+        f"fk_{_normalize_identifier(table_name)}_{_normalize_identifier(local_column)}"
+        f"_{_normalize_identifier(referenced_table)}"
+    )
+    return name[:63]
+
+
+def build_index_name(table_name: str, column_name: str) -> str:
+    """Build deterministic index name."""
+    name = f"idx_{_normalize_identifier(table_name)}_{_normalize_identifier(column_name)}"
+    return name[:63]
 
 
 async def constraint_exists(
@@ -83,3 +116,26 @@ async def add_unique_constraint_safe(
     except Exception:
         await session.rollback()
         logger.warning("Failed to add UNIQUE constraint %s", constraint_name)
+
+
+async def add_index_safe(
+    session: AsyncSession,
+    table_name: str,
+    index_name: str,
+    column_name: str,
+) -> None:
+    """Add index idempotently with IF NOT EXISTS semantics."""
+    if not IDENTIFIER_RE.fullmatch(table_name) or not IDENTIFIER_RE.fullmatch(index_name):
+        logger.warning("Skipping index creation due to invalid identifier: %s.%s", table_name, index_name)
+        return
+    if not IDENTIFIER_RE.fullmatch(column_name):
+        logger.warning("Skipping index creation due to invalid column identifier: %s", column_name)
+        return
+
+    query = text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ("{column_name}")')
+    try:
+        await session.execute(query)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.warning("Failed to add index %s", index_name)

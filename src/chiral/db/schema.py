@@ -5,10 +5,131 @@
 
 """Database initialization and schema definitions."""
 
+from typing import Any
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chiral.db.ddl_helpers import add_foreign_key_safe
+from chiral.db.ddl_helpers import (
+    add_foreign_key_safe,
+    add_index_safe,
+    build_fk_constraint_name,
+    build_index_name,
+)
+from chiral.domain.key_policy import build_dynamic_child_key_spec, normalize_identifier
+
+ANALYSIS_METADATA_KEY = "__analysis_metadata__"
+
+
+def get_decomposition_plan(analysis: dict[str, Any]) -> dict[str, Any]:
+    """Extract decomposition plan from analysis metadata with default shape."""
+    metadata = analysis.get(ANALYSIS_METADATA_KEY, {}) if isinstance(analysis, dict) else {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    plan = metadata.get("decomposition_plan", {})
+    if not isinstance(plan, dict):
+        plan = {}
+
+    entities = plan.get("entities", [])
+    if not isinstance(entities, list):
+        entities = []
+
+    return {
+        "version": int(plan.get("version", 1) or 1),
+        "parent_table": str(plan.get("parent_table", "chiral_data")),
+        "entities": entities,
+    }
+
+
+def _normalize_child_columns(entity: dict[str, Any]) -> list[str]:
+    raw_columns = entity.get("child_columns", [])
+    if not isinstance(raw_columns, list):
+        return []
+
+    normalized: list[str] = []
+    for column in raw_columns:
+        if not isinstance(column, str):
+            continue
+        normalized_column = normalize_identifier(column)
+        if normalized_column not in normalized:
+            normalized.append(normalized_column)
+    return normalized
+
+
+async def materialize_decomposition_tables(
+    session: AsyncSession,
+    analysis: dict[str, Any],
+    *,
+    parent_table: str = "chiral_data",
+) -> None:
+    """Create/extend dynamic child tables for detected repeating entities."""
+    plan = get_decomposition_plan(analysis)
+    entities = plan.get("entities", [])
+    if not entities:
+        return
+
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+
+        source_field = entity.get("source_field")
+        if not isinstance(source_field, str) or not source_field:
+            continue
+
+        key_spec = build_dynamic_child_key_spec(
+            parent_table=parent_table,
+            source_field=source_field,
+            parent_pk_column="id",
+            parent_pk_type="SERIAL",
+            include_session_fk=True,
+        )
+
+        child_table = key_spec.table_name
+        parent_fk_column = key_spec.foreign_keys[0]["local_column"]
+        child_columns = _normalize_child_columns(entity)
+
+        create_sql = (
+            f'CREATE TABLE IF NOT EXISTS "{child_table}" ('
+            f"id SERIAL PRIMARY KEY, "
+            f'"{parent_fk_column}" INTEGER NOT NULL, '
+            f'"session_id" TEXT, '
+            f"overflow_data JSONB DEFAULT '{{}}'::jsonb"
+            ");"
+        )
+        await session.execute(text(create_sql))
+
+        for column in child_columns:
+            await session.execute(text(f'ALTER TABLE "{child_table}" ADD COLUMN IF NOT EXISTS "{column}" TEXT'))
+
+        for foreign_key in key_spec.foreign_keys:
+            constraint_name = build_fk_constraint_name(
+                child_table,
+                foreign_key["local_column"],
+                foreign_key["referenced_table"],
+            )
+            await add_foreign_key_safe(
+                session=session,
+                table_name=child_table,
+                constraint_name=constraint_name,
+                local_column=foreign_key["local_column"],
+                referenced_table=foreign_key["referenced_table"],
+                referenced_column=foreign_key["referenced_column"],
+                on_delete=foreign_key.get("on_delete", "CASCADE"),
+            )
+
+        await add_index_safe(
+            session=session,
+            table_name=child_table,
+            index_name=build_index_name(child_table, parent_fk_column),
+            column_name=parent_fk_column,
+        )
+        await add_index_safe(
+            session=session,
+            table_name=child_table,
+            index_name=build_index_name(child_table, "session_id"),
+            column_name="session_id",
+        )
 
 
 async def init_metadata_table(session: AsyncSession) -> None:

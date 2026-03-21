@@ -3,24 +3,23 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""TA-friendly end-to-end showcase for implemented phases.
-
-Runs after ingestion to print formatted metadata and execute 10 example queries.
-"""
+"""Compact end-to-end showcase for normalized tables and join-aware querying."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
+from urllib import error, request as urlrequest
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.chiral.config import get_settings
-from src.chiral.core.query_service import translate_json_request
 
 SESSION_ID = "session_assignment_1"
+API_BASE_URL = os.getenv("CHIRAL_API_URL", "http://127.0.0.1:8000")
 
 
 def _print_header(title: str) -> None:
@@ -44,236 +43,263 @@ async def _fetch_scalar(conn, query: str, params: dict[str, Any] | None = None) 
     return result.scalar()
 
 
-async def show_metadata(conn) -> None:
-    _print_header("DEMO2: FORMATTED METADATA")
+def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    data = json.dumps(payload).encode("utf-8")
+    req = urlrequest.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlrequest.urlopen(req, timeout=30) as response:  # nosec B310
+        body = response.read().decode("utf-8")
+        return json.loads(body) if body else {}
 
+
+async def _execute_request_via_api(payload: dict[str, Any]) -> dict[str, Any]:
+    endpoint = f"{API_BASE_URL.rstrip('/')}/query/execute"
+    try:
+        return await asyncio.to_thread(_post_json, endpoint, payload)
+    except error.URLError as exc:
+        return {
+            "sql": "<api-unreachable>",
+            "params": {},
+            "rows": [],
+            "row_count": 0,
+            "error": str(exc),
+        }
+
+
+async def _load_schema_json(conn) -> dict[str, Any]:
     metadata = await _fetchone_mapping(
         conn,
-        """
-        SELECT session_id, status, record_count, schema_version,
-               schema_json, drift_events, safety_events, migration_metrics, created_at
-        FROM session_metadata
-        WHERE session_id = :sid
-        """,
+        "SELECT schema_json FROM session_metadata WHERE session_id = :sid",
         {"sid": SESSION_ID},
     )
-
     if not metadata:
-        print(f"No metadata found for session_id={SESSION_ID}")
-        return
+        return {}
 
-    schema_json = metadata.get("schema_json")
-    if isinstance(schema_json, str):
+    raw = metadata.get("schema_json")
+    if isinstance(raw, str):
         try:
-            metadata["schema_json"] = json.loads(schema_json)
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
         except json.JSONDecodeError:
-            pass
+            return {}
 
-    print(_pretty_json(metadata))
-
-    schema = metadata.get("schema_json") if isinstance(metadata.get("schema_json"), dict) else {}
-    drift_events = metadata.get("drift_events") or []
-    safety_events = metadata.get("safety_events") or []
-    migration_metrics = metadata.get("migration_metrics") or []
-
-    print("\nSummary:")
-    print(f"- Learned fields: {len(schema)}")  # type: ignore
-    print(f"- Drift events: {len(drift_events)}")
-    print(f"- Safety events: {len(safety_events)}")
-    print(f"- Metrics snapshots: {len(migration_metrics)}")
+    return raw if isinstance(raw, dict) else {}
 
 
-async def _discover_query_hints(conn) -> tuple[str | None, Any, str | None]:
-    sample_key = await _fetch_scalar(
+def _extract_decomposition_plan(schema_json: dict[str, Any]) -> dict[str, Any]:
+    meta = schema_json.get("__analysis_metadata__", {})
+    if isinstance(meta, dict):
+        plan = meta.get("decomposition_plan", {})
+        if isinstance(plan, dict):
+            return plan
+    return {"version": 1, "parent_table": "chiral_data", "entities": []}
+
+
+async def show_schema_summary(conn) -> dict[str, Any]:
+    _print_header("DEMO2: SCHEMA SUMMARY")
+
+    schema_json = await _load_schema_json(conn)
+    if not schema_json:
+        print(f"No metadata found for session_id={SESSION_ID}")
+        return {"version": 1, "parent_table": "chiral_data", "entities": []}
+
+    filtered_fields = []
+    for name, meta in schema_json.items():
+        if name == "__analysis_metadata__":
+            continue
+        if isinstance(meta, dict):
+            filtered_fields.append(
+                {
+                    "attribute": name,
+                    "type": meta.get("type", "unknown"),
+                    "stored_in": meta.get("target", "unknown"),
+                }
+            )
+
+    filtered_fields.sort(key=lambda item: str(item["attribute"]))
+
+    print("Attributes (name, type, storage):")
+    for item in filtered_fields:
+        print(f"- {item['attribute']}: type={item['type']}, stored_in={item['stored_in']}")
+
+    table_count = await _fetch_scalar(
         conn,
         """
-        SELECT key
-        FROM chiral_data, jsonb_object_keys(overflow_data) AS key
-        WHERE session_id = :sid AND overflow_data != '{}'::jsonb
-        LIMIT 1
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_type = 'BASE TABLE'
         """,
-        {"sid": SESSION_ID},
     )
+    print(f"\nTotal tables in public schema: {table_count}")
 
-    sample_value = None
-    if sample_key:
-        sample_value = await _fetch_scalar(
-            conn,
-            """
-            SELECT overflow_data->>:key
-            FROM chiral_data
-            WHERE session_id = :sid AND overflow_data ? :key
-            LIMIT 1
-            """,
-            {"sid": SESSION_ID, "key": sample_key},
-        )
+    decomposition_plan = _extract_decomposition_plan(schema_json)
+    entities = decomposition_plan.get("entities", []) if isinstance(decomposition_plan, dict) else []
+    child_tables = []
+    if isinstance(entities, list):
+        for entity in entities:
+            if isinstance(entity, dict) and isinstance(entity.get("child_table"), str):
+                child_tables.append(entity["child_table"])
 
-    numeric_key = await _fetch_scalar(
-        conn,
-        """
-        SELECT kv.key
-        FROM chiral_data,
-             jsonb_each_text(overflow_data) AS kv
-        WHERE session_id = :sid
-          AND kv.value ~ '^-?\\d+(?:\\.\\d+)?$'
-        GROUP BY kv.key
-        ORDER BY COUNT(*) DESC
-        LIMIT 1
-        """,
-        {"sid": SESSION_ID},
-    )
+    if child_tables:
+        print(f"Detected child tables from decomposition: {', '.join(sorted(set(child_tables)))}")
+    else:
+        print("Detected child tables from decomposition: none")
 
-    return sample_key, sample_value, numeric_key
+    return decomposition_plan
 
 
-async def show_example_queries(conn) -> None:
-    _print_header("DEMO2: 10 EXAMPLE QUERIES (TRANSLATED + EXECUTED)")
+async def show_example_queries(decomposition_plan: dict[str, Any]) -> None:
+    _print_header("DEMO2: 5 EXAMPLE QUERIES (INCLUDES JOINS)")
 
-    sample_key, sample_value, numeric_key = await _discover_query_hints(conn)
+    entities = decomposition_plan.get("entities", []) if isinstance(decomposition_plan, dict) else []
+    first_entity = entities[0] if isinstance(entities, list) and entities and isinstance(entities[0], dict) else {}
+    source_field = first_entity.get("source_field") if isinstance(first_entity.get("source_field"), str) else None
+
+    child_columns = first_entity.get("child_columns") if isinstance(first_entity.get("child_columns"), list) else []
+    first_child_col = None
+    second_child_col = None
+    for column in child_columns or []:
+        if isinstance(column, str) and column:
+            if first_child_col is None:
+                first_child_col = column
+            elif second_child_col is None:
+                second_child_col = column
+                break
 
     requests: list[dict[str, Any]] = [
         {
-            "label": "Q1 Basic rows",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["session_id", "username", "sys_ingested_at"],
-                "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
-                "limit": 5,
-            },
-        },
-        {
-            "label": "Q2 Username + timestamp",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["username", "t_stamp"],
-                "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
-                "limit": 10,
-            },
-        },
-        {
-            "label": "Q3 Latest ingested slice",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["sys_ingested_at", "username"],
-                "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
-                "limit": 10,
-            },
-        },
-        {
-            "label": "Q4 SQL range filter",
+            "label": "Q1 Parent SQL filter",
             "request": {
                 "operation": "read",
                 "table": "chiral_data",
                 "select": ["username", "sys_ingested_at"],
-                "filters": [
-                    {"field": "session_id", "op": "eq", "value": SESSION_ID},
-                    {"field": "sys_ingested_at", "op": "gt", "value": 0},
-                ],
-                "limit": 5,
-            },
-        },
-        {
-            "label": "Q5 JSONB key projection",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["username", f"overflow_data.{sample_key or 'fallback_key'}"],
                 "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
                 "limit": 5,
             },
         },
         {
-            "label": "Q6 JSONB eq filter",
+            "label": "Q2 Parent JSONB filter",
             "request": {
                 "operation": "read",
                 "table": "chiral_data",
-                "select": ["username"],
-                "filters": [
-                    {"field": "session_id", "op": "eq", "value": SESSION_ID},
-                    {
-                        "field": f"overflow_data.{sample_key or 'fallback_key'}",
-                        "op": "eq",
-                        "value": str(sample_value or "unknown"),
-                    },
-                ],
-                "limit": 5,
-            },
-        },
-        {
-            "label": "Q7 JSONB numeric-safe gt filter",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["username", f"overflow_data.{numeric_key or 'fallback_numeric'}"],
-                "filters": [
-                    {"field": "session_id", "op": "eq", "value": SESSION_ID},
-                    {"field": f"overflow_data.{numeric_key or 'fallback_numeric'}", "op": "gt", "value": 25},
-                ],
-                "limit": 5,
-            },
-        },
-        {
-            "label": "Q8 JSONB numeric-safe gte filter",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["username", f"overflow_data.{numeric_key or 'fallback_numeric'}"],
-                "filters": [
-                    {"field": "session_id", "op": "eq", "value": SESSION_ID},
-                    {"field": f"overflow_data.{numeric_key or 'fallback_numeric'}", "op": "gte", "value": 0},
-                ],
-                "limit": 5,
-            },
-        },
-        {
-            "label": "Q9 Offset + pagination",
-            "request": {
-                "operation": "read",
-                "table": "chiral_data",
-                "select": ["session_id", "username"],
+                "select": ["username", "overflow_data.metadata"],
                 "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
                 "limit": 5,
-                "offset": 5,
-            },
-        },
-        {
-            "label": "Q10 Metadata table query",
-            "request": {
-                "operation": "read",
-                "table": "session_metadata",
-                "select": ["session_id", "status", "schema_version", "record_count"],
-                "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
-                "limit": 1,
             },
         },
     ]
 
-    for item in requests:
-        label = item["label"]
-        request_payload = item["request"]
-        built = translate_json_request(request_payload)
+    if source_field:
+        requests.extend(
+            [
+                {
+                    "label": "Q3 Inferred JOIN child SQL projection",
+                    "request": {
+                        "operation": "read",
+                        "table": "chiral_data",
+                        "select": ["username", f"{source_field}.{first_child_col or 'id'}"],
+                        "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
+                        "decomposition_plan": decomposition_plan,
+                        "limit": 5,
+                    },
+                },
+                {
+                    "label": "Q4 Inferred JOIN child SQL filter",
+                    "request": {
+                        "operation": "read",
+                        "table": "chiral_data",
+                        "select": ["username", f"{source_field}.{first_child_col or 'id'}"],
+                        "filters": [
+                            {"field": "session_id", "op": "eq", "value": SESSION_ID},
+                            {
+                                "field": f"{source_field}.{second_child_col or first_child_col or 'id'}",
+                                "op": "ne",
+                                "value": "",
+                            },
+                        ],
+                        "decomposition_plan": decomposition_plan,
+                        "limit": 5,
+                    },
+                },
+                {
+                    "label": "Q5 Inferred JOIN child JSONB projection",
+                    "request": {
+                        "operation": "read",
+                        "table": "chiral_data",
+                        "select": ["username", f"{source_field}.overflow_data.meta"],
+                        "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
+                        "decomposition_plan": decomposition_plan,
+                        "limit": 5,
+                    },
+                },
+            ]
+        )
+    else:
+        requests.extend(
+            [
+                {
+                    "label": "Q3 Fallback SQL query",
+                    "request": {
+                        "operation": "read",
+                        "table": "chiral_data",
+                        "select": ["username", "t_stamp"],
+                        "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
+                        "limit": 5,
+                    },
+                },
+                {
+                    "label": "Q4 Fallback JSONB numeric-safe range",
+                    "request": {
+                        "operation": "read",
+                        "table": "chiral_data",
+                        "select": ["username", "overflow_data.temperature"],
+                        "filters": [
+                            {"field": "session_id", "op": "eq", "value": SESSION_ID},
+                            {"field": "overflow_data.temperature", "op": "gt", "value": 20},
+                        ],
+                        "limit": 5,
+                    },
+                },
+                {
+                    "label": "Q5 Metadata check",
+                    "request": {
+                        "operation": "read",
+                        "table": "session_metadata",
+                        "select": ["session_id", "status", "schema_version"],
+                        "filters": [{"field": "session_id", "op": "eq", "value": SESSION_ID}],
+                        "limit": 1,
+                    },
+                },
+            ]
+        )
 
-        result = await conn.execute(text(built.sql), built.params)
-        rows = result.mappings().fetchmany(3)
+    for item in requests[:5]:
+        label = item["label"]
+        payload = item["request"]
+        result = await _execute_request_via_api(payload)
+        rows = result.get("rows", []) if isinstance(result.get("rows"), list) else []
+        sample_rows = rows[:3]
 
         print(f"\n{label}")
-        print(f"- Request: {_pretty_json(request_payload)}")
-        print(f"- SQL: {built.sql}")
-        print(f"- Params: {_pretty_json(built.params)}")
-        print(f"- Sample rows ({len(rows)} shown): {_pretty_json([dict(r) for r in rows])}")
+        print(f"- SQL: {result.get('sql', '<n/a>')}")
+        print(f"- Params: {_pretty_json(result.get('params', {}))}")
+        if "error" in result:
+            print(f"- API execute error: {result['error']}")
+        print(f"- Sample rows ({len(sample_rows)} shown): {_pretty_json(sample_rows)}")
 
 
 async def wait_for_migration_completion(conn, timeout_seconds: int = 90, poll_interval: float = 2.0) -> None:
-    """Poll metadata/staging until migration completes or timeout is reached."""
     print("\nWaiting for migration completion...")
     elapsed = 0.0
     while elapsed <= timeout_seconds:
         status_row = await _fetchone_mapping(
             conn,
-            "SELECT status, record_count FROM session_metadata WHERE session_id = :sid",
+            "SELECT status FROM session_metadata WHERE session_id = :sid",
             {"sid": SESSION_ID},
         )
         staging_rows = await _fetch_scalar(
@@ -288,9 +314,7 @@ async def wait_for_migration_completion(conn, timeout_seconds: int = 90, poll_in
         )
 
         status = status_row.get("status") if status_row else None
-        print(
-            f"- t={int(elapsed):02d}s status={status} staging={staging_rows} chiral={chiral_rows}",
-        )
+        print(f"- t={int(elapsed):02d}s status={status} staging={staging_rows} chiral={chiral_rows}")
 
         if staging_rows == 0 and chiral_rows > 0 and status in {"migrated", "migrating_incremental"}:
             print("Migration is ready.")
@@ -299,13 +323,11 @@ async def wait_for_migration_completion(conn, timeout_seconds: int = 90, poll_in
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
 
-    print("Warning: migration did not fully settle before timeout; continuing with current state.")
+    print("Warning: migration did not fully settle before timeout; continuing.")
 
 
 async def main() -> None:
-    _print_header("DEMO2: END-TO-END SHOWCASE")
-    print("Features covered: phases 1-8 (routing, normalization, keys/FKs, JSONB strategy,")
-    print("metadata versioning, CRUD translation, performance, observability).")
+    _print_header("DEMO2: NORMALIZATION + JOIN SHOWCASE")
 
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
@@ -314,17 +336,22 @@ async def main() -> None:
         await wait_for_migration_completion(conn)
 
         total_rows = await _fetch_scalar(
-            conn, "SELECT COUNT(*) FROM chiral_data WHERE session_id = :sid", {"sid": SESSION_ID}
+            conn,
+            "SELECT COUNT(*) FROM chiral_data WHERE session_id = :sid",
+            {"sid": SESSION_ID},
         )
         staging_rows = await _fetch_scalar(
-            conn, "SELECT COUNT(*) FROM staging_data WHERE session_id = :sid", {"sid": SESSION_ID}
+            conn,
+            "SELECT COUNT(*) FROM staging_data WHERE session_id = :sid",
+            {"sid": SESSION_ID},
         )
+
         print(f"Session: {SESSION_ID}")
         print(f"Rows in chiral_data: {total_rows}")
         print(f"Rows pending in staging_data: {staging_rows}")
 
-        await show_metadata(conn)
-        await show_example_queries(conn)
+        decomposition_plan = await show_schema_summary(conn)
+        await show_example_queries(decomposition_plan)
 
     await engine.dispose()
 

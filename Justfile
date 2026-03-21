@@ -70,7 +70,7 @@ demo:
 
     @echo "Demo Complete. Servers are running in background. Run 'just stop' to kill them."
 
-# Run full demo + formatted metadata and 10 example queries
+# Run full demo + formatted metadata and 5 example queries
 demo2:
     @uv run python -c "from pathlib import Path; import sys; print('Error: .env not found') or sys.exit(1) if not Path('.env').exists() else None"
 
@@ -91,12 +91,12 @@ demo2:
     @uv run python scripts/manage.py wait
 
     @echo "Running Data Feeder (1000 records)..."
-    @uv run python feed_data.py
+    @uv run python feed_data2.py
 
     @echo "Waiting for background workers to finish..."
     @uv run python -c "import time; time.sleep(10)"
 
-    @echo "Running DEMO2 showcase (formatted metadata + 10 example queries)..."
+    @echo "Running DEMO2 showcase (formatted metadata + 5 example queries)..."
     @uv run python demo2.py
 
     @echo "Demo2 Complete. Servers are running in background. Run 'just stop' to kill them."

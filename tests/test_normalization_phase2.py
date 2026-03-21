@@ -9,6 +9,7 @@ from src.chiral.domain.normalization import (
     NormalizationPolicy,
     calculate_uniqueness_confidence,
     decide_storage_target,
+    detect_repeating_entities,
     infer_dominant_type,
 )
 from src.chiral.domain.routing import RoutingReason, StorageTarget
@@ -53,3 +54,37 @@ def test_uniqueness_confidence_ratio() -> None:
     """Uniqueness confidence should be distinct_count / total_docs."""
     ratio = calculate_uniqueness_confidence(["a", "a", "b"], expected_total=3)
     assert ratio == 2 / 3
+
+
+def test_detect_repeating_entities_from_nested_object_arrays() -> None:
+    """Homogeneous arrays of objects should yield one-to-many decomposition candidates."""
+    docs = [
+        {
+            "username": "user1",
+            "comments": [{"text": "nice", "time": 123}, {"text": "great", "time": 124}],
+        },
+        {
+            "username": "user2",
+            "comments": [{"text": "ok", "time": 130}],
+        },
+    ]
+
+    entities = detect_repeating_entities(docs, parent_table="chiral_data")
+    assert len(entities) == 1
+    entity = entities[0]
+    assert entity.source_field == "comments"
+    assert entity.child_table == "chiral_data_comments"
+    assert entity.relationship == "one_to_many"
+    assert "text" in entity.child_columns
+    assert "time" in entity.child_columns
+
+
+def test_detect_repeating_entities_ignores_non_object_arrays() -> None:
+    """Arrays with scalar/mixed values should not be treated as relational entities."""
+    docs = [
+        {"username": "user1", "tags": ["a", "b", "c"]},
+        {"username": "user2", "tags": ["d", "e"]},
+    ]
+
+    entities = detect_repeating_entities(docs, parent_table="chiral_data")
+    assert entities == []

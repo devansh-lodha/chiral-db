@@ -13,6 +13,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+ANALYSIS_METADATA_KEY = "__analysis_metadata__"
+
 
 @dataclass(frozen=True)
 class MetadataSnapshot:
@@ -48,6 +50,16 @@ def build_drift_event(column_name: str, previous_type: str | None) -> dict[str, 
     }
 
 
+def build_decomposition_plan_event(parent_table: str, entity_count: int) -> dict[str, Any]:
+    """Build a normalized decomposition-plan drift event record."""
+    return {
+        "event": "decomposition_plan_updated",
+        "parent_table": parent_table,
+        "entity_count": entity_count,
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+    }
+
+
 def apply_drift_to_metadata(
     schema: dict[str, Any],
     drift_events: list[dict[str, Any]],
@@ -68,6 +80,35 @@ def apply_drift_to_metadata(
         updated_schema[column_name]["routing_reason"] = "type_drift"
 
     updated_events = [*drift_events, build_drift_event(column_name, previous_type)]
+    return updated_schema, updated_events, 1
+
+
+def apply_decomposition_plan_to_metadata(
+    schema: dict[str, Any],
+    drift_events: list[dict[str, Any]],
+    decomposition_plan: dict[str, Any],
+    previous_decomposition_plan: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
+    """Merge decomposition plan into schema metadata with version/drift tracking."""
+    updated_schema = dict(schema)
+    current_metadata = updated_schema.get(ANALYSIS_METADATA_KEY)
+    if not isinstance(current_metadata, dict):
+        current_metadata = {}
+
+    if previous_decomposition_plan is None:
+        previous_decomposition_plan = current_metadata.get("decomposition_plan")
+
+    current_metadata["decomposition_plan"] = decomposition_plan
+    updated_schema[ANALYSIS_METADATA_KEY] = current_metadata
+
+    changed = previous_decomposition_plan != decomposition_plan
+    if not changed:
+        return updated_schema, drift_events, 0
+
+    parent_table = str(decomposition_plan.get("parent_table", "chiral_data"))
+    entities = decomposition_plan.get("entities", [])
+    entity_count = len(entities) if isinstance(entities, list) else 0
+    updated_events = [*drift_events, build_decomposition_plan_event(parent_table, entity_count)]
     return updated_schema, updated_events, 1
 
 

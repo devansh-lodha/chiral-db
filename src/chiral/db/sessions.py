@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from chiral.db.connection import get_sql_engine
+from .connection import get_sql_engine
 
 
 def session(func: Callable[..., Any]) -> Callable[..., Any]:

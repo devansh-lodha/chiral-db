@@ -58,10 +58,11 @@ ignore = [
     "S603", "S607", "S310",   # subprocess security (ignore)
     "ANN401",                 # Any typing
     "FBT001",                 # boolean args
+    "S311",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "D"]
+"tests/**/*.py" = ["S101", "D", "SLF001"]
 "demo2.py" = ["ALL"]
 
 [tool.ruff.format]

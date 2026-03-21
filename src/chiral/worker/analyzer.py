@@ -18,10 +18,13 @@ from chiral.domain.normalization import (
     calculate_field_stability_ratio,
     calculate_max_nesting_depth,
     calculate_uniqueness_confidence,
+    detect_repeating_entities,
     evaluate_jsonb_strategy,
     infer_dominant_type,
 )
 from chiral.utils.heuristics import calculate_entropy
+
+ANALYSIS_METADATA_KEY = "__analysis_metadata__"
 
 
 @session
@@ -114,6 +117,35 @@ async def analyze_staging(
                 "field_stability_ratio_threshold": policy.field_stability_ratio_threshold,
             },
         }
+
+    repeating_entities = detect_repeating_entities(
+        docs,
+        parent_table="chiral_data",
+        min_occurrence_ratio=float(os.getenv("DECOMPOSITION_MIN_OCCURRENCE_RATIO", "0.2")),
+        min_homogeneity_ratio=float(os.getenv("DECOMPOSITION_MIN_HOMOGENEITY_RATIO", "0.7")),
+        min_average_cardinality=float(os.getenv("DECOMPOSITION_MIN_AVG_CARDINALITY", "1.0")),
+        stable_key_ratio_threshold=float(os.getenv("DECOMPOSITION_STABLE_KEY_RATIO_THRESHOLD", "0.6")),
+    )
+
+    analysis_result[ANALYSIS_METADATA_KEY] = {
+        "decomposition_plan": {
+            "version": 1,
+            "parent_table": "chiral_data",
+            "entities": [
+                {
+                    "source_field": entity.source_field,
+                    "child_table": entity.child_table,
+                    "relationship": entity.relationship,
+                    "occurrence_ratio": entity.occurrence_ratio,
+                    "homogeneity_ratio": entity.homogeneity_ratio,
+                    "average_cardinality": entity.average_cardinality,
+                    "child_columns": entity.child_columns,
+                    "reason": entity.reason,
+                }
+                for entity in repeating_entities
+            ],
+        }
+    }
 
     return analysis_result
 
