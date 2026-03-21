@@ -51,7 +51,6 @@ def main() -> None:
     sim_port = 8001
 
     pg_port = int(env.get("POSTGRES_PORT", "5432"))
-    mongo_port = int(env.get("MONGO_PORT", "27017"))
 
     errors = []
 
@@ -66,9 +65,6 @@ def main() -> None:
     # Note: If running in Docker, these ports on localhost must be free for binding
     if check_port(pg_port):
         errors.append(f"Port {pg_port} is busy (PostgreSQL). Local DB running?")
-
-    if check_port(mongo_port):
-        errors.append(f"Port {mongo_port} is busy (MongoDB). Local DB running?")
 
     if errors:
         logger.error("\nERROR: Port conflicts detected!")
