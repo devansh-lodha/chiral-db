@@ -278,9 +278,6 @@ Input: {
   "table": "chiral_data",
   "select": ["username", "temperature", "comments.text", "comments.score"],
   "filter": {"comments.score": {">": 50}},
-  "decomposition_plan": {
-    "comments": {"source_field": "comments", "child_table": "chiral_data_comments", ...}
-  }
 }
 ```
 Generates SQL:
@@ -326,8 +323,8 @@ WHERE child.score > 50
 
 **A:** This implementation draws from:
 
-   - [JSON Types & Operators](https://www.postgresql.org/docs/current/functions-json.html) – JSONB indexing and type casting.
-   - [CREATE TABLE Constraints](https://www.postgresql.org/docs/current/ddl-constraints.html) – Primary/foreign key design.
+   - [JSON Types & Operators](https://www.postgresql.org/docs/current/datatype-json.html)
+   - [JSON Functions and Operators](https://www.postgresql.org/docs/9.5/functions-json.html)
    - [GIN Indexes](https://www.postgresql.org/docs/current/indexes-types.html) – JSONB query optimization.
 ---
 
