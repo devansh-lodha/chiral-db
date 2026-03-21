@@ -6,11 +6,13 @@
 """Cross-platform service management script."""
 
 import os
+import shutil
 import signal
 import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 
@@ -19,7 +21,7 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def kill_process_on_port(port: int):
+def kill_process_on_port(port: int) -> None:
     """Kill processes listening on the specified port (cross-platform)."""
     if sys.platform == "win32":
         try:
@@ -29,8 +31,8 @@ def kill_process_on_port(port: int):
                     pid = line.strip().split()[-1]
                     print(f"Killing process {pid} on port {port}...")
                     subprocess.run(["taskkill", "/F", "/PID", pid], check=False)
-        except Exception as e:
-            print(f"Error killing process on port {port}: {e}")
+        except Exception:
+            print(f"Error killing process on port {port}")
     else:
         try:
             # Using lsof to find PID
@@ -40,11 +42,11 @@ def kill_process_on_port(port: int):
                 os.kill(int(pid), signal.SIGKILL)
         except subprocess.CalledProcessError:
             pass  # No process on port
-        except Exception as e:
-            print(f"Error killing process on port {port}: {e}")
+        except Exception:
+            print(f"Error killing process on port {port}")
 
 
-def cleanup():
+def cleanup() -> None:
     """Remove logs and temporary files."""
     files_to_remove = ["chiral.log", "simulation.log", ".coverage", "coverage.xml"]
     for f in files_to_remove:
@@ -54,34 +56,29 @@ def cleanup():
 
     # Remove pycache
     for p in Path().rglob("__pycache__"):
-        import shutil
-
         try:
             shutil.rmtree(p)
         except Exception:
-            pass
+            print(f"Error removing {p}")
 
 
-def start_service(command: list[str], log_file: str, env=None):
+def start_service(command: list[str], log_file: str, env: dict[str, str] | None = None) -> subprocess.Popen:
     """Start a service in the background and redirect output to log file."""
     log_path = Path(log_file)
     f = log_path.open("a")
 
     # Use subprocess.Popen for background execution
-    process = subprocess.Popen(
+    return subprocess.Popen(
         command,
         stdout=f,
         stderr=subprocess.STDOUT,
         env={**os.environ, **(env or {})},
-        start_new_session=True if sys.platform != "win32" else False,
+        start_new_session=sys.platform != "win32",
     )
-    return process
 
 
-def wait_for_url(url: str, timeout: int = 30, label: str = "Service"):
+def wait_for_url(url: str, timeout: int = 30, label: str = "Service") -> bool:
     """Wait for a URL to return a 200 OK status."""
-    import urllib.request
-
     print(f"Waiting for {label} at {url}...")
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -91,18 +88,18 @@ def wait_for_url(url: str, timeout: int = 30, label: str = "Service"):
                     print(f"   {label} is ready.")
                     return True
         except Exception:
-            pass
+            print(f"   {label} not ready yet...")
         time.sleep(1)
     print(f"Timeout waiting for {label}.")
     return False
 
 
-def wait_for_db(timeout: int = 30):
+def wait_for_db(timeout: int = 30) -> bool:
     """Wait for databases to be ready using verify_connections.py."""
     print("Waiting for Databases...")
     start_time = time.time()
     while time.time() - start_time < timeout:
-        result = subprocess.run([sys.executable, "verify_connections.py"], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, "verify_connections.py"], capture_output=True, text=True, check=False)
         if result.returncode == 0:
             print("   Databases are ready.")
             return True

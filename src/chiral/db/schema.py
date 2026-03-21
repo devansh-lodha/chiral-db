@@ -8,19 +8,37 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chiral.db.ddl_helpers import add_foreign_key_safe
+
 
 async def init_metadata_table(session: AsyncSession) -> None:
-    """Ensure the session metadata table exists."""
+    """Ensure the session metadata table exists with PK/FK constraints."""
     sql = """
     CREATE TABLE IF NOT EXISTS session_metadata (
         session_id TEXT PRIMARY KEY,
         record_count INTEGER DEFAULT 0,
         status TEXT DEFAULT 'collecting',
         schema_json TEXT,
+        schema_version INTEGER DEFAULT 1,
+        drift_events JSONB DEFAULT '[]'::jsonb,
+        safety_events JSONB DEFAULT '[]'::jsonb,
+        migration_metrics JSONB DEFAULT '[]'::jsonb,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """
     await session.execute(text(sql))
+    await session.execute(
+        text("ALTER TABLE session_metadata ADD COLUMN IF NOT EXISTS schema_version INTEGER DEFAULT 1")
+    )
+    await session.execute(
+        text("ALTER TABLE session_metadata ADD COLUMN IF NOT EXISTS drift_events JSONB DEFAULT '[]'::jsonb")
+    )
+    await session.execute(
+        text("ALTER TABLE session_metadata ADD COLUMN IF NOT EXISTS safety_events JSONB DEFAULT '[]'::jsonb")
+    )
+    await session.execute(
+        text("ALTER TABLE session_metadata ADD COLUMN IF NOT EXISTS migration_metrics JSONB DEFAULT '[]'::jsonb")
+    )
 
     # Main data table with overflow_data JSONB column (replaces MongoDB permanent collection)
     # System columns:
@@ -50,4 +68,36 @@ async def init_metadata_table(session: AsyncSession) -> None:
     """
     await session.execute(text(sql_staging))
 
+    # Performance indexes (idempotent)
+    await session.execute(text('CREATE INDEX IF NOT EXISTS idx_chiral_data_session_id ON "chiral_data" (session_id)'))
+    await session.execute(
+        text('CREATE INDEX IF NOT EXISTS idx_chiral_data_sys_ingested_at ON "chiral_data" (sys_ingested_at)')
+    )
+    await session.execute(text('CREATE INDEX IF NOT EXISTS idx_chiral_data_username ON "chiral_data" (username)'))
+    await session.execute(
+        text('CREATE INDEX IF NOT EXISTS idx_chiral_data_overflow_gin ON "chiral_data" USING GIN (overflow_data)')
+    )
+    await session.execute(text('CREATE INDEX IF NOT EXISTS idx_staging_data_session_id ON "staging_data" (session_id)'))
+
     await session.commit()
+
+    # Add foreign key constraints (idempotent)
+    await add_foreign_key_safe(
+        session=session,
+        table_name="chiral_data",
+        constraint_name="fk_chiral_data_session",
+        local_column="session_id",
+        referenced_table="session_metadata",
+        referenced_column="session_id",
+        on_delete="CASCADE",
+    )
+
+    await add_foreign_key_safe(
+        session=session,
+        table_name="staging_data",
+        constraint_name="fk_staging_data_session",
+        local_column="session_id",
+        referenced_table="session_metadata",
+        referenced_column="session_id",
+        on_delete="CASCADE",
+    )

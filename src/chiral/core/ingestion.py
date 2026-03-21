@@ -44,8 +44,8 @@ async def ingest_data(
 
     # 1. Atomically initialize session if not exists using INSERT ON CONFLICT
     init_sql = text("""
-        INSERT INTO session_metadata (session_id, record_count)
-        VALUES (:sid, 0)
+        INSERT INTO session_metadata (session_id, record_count, schema_version, drift_events, safety_events, migration_metrics)
+        VALUES (:sid, 0, 1, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)
         ON CONFLICT (session_id) DO NOTHING
     """)
     await sql_session.execute(init_sql, {"sid": session_id})

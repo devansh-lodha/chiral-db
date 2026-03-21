@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from chiral.core.ingestion import ingest_data
 from chiral.core.orchestrator import flush_staging, trigger_worker
+from chiral.core.query_service import translate_json_request
 
 app = FastAPI(title="Chiral DB Assignment")
 
@@ -25,6 +26,19 @@ class IngestRequest(BaseModel):
     """Request model for data ingestion endpoint."""
 
     data: dict[str, Any]
+
+
+class QueryTranslateRequest(BaseModel):
+    """Request model for query translation endpoint."""
+
+    operation: str
+    table: str = "chiral_data"
+    select: list[str] | None = None
+    filters: list[dict[str, Any]] | None = None
+    payload: dict[str, Any] | None = None
+    updates: dict[str, Any] | None = None
+    limit: int | None = None
+    offset: int | None = None
 
 
 @app.post("/flush/{session_id}")
@@ -49,3 +63,13 @@ async def ingest_endpoint(request: IngestRequest, background_tasks: BackgroundTa
 def root() -> dict[str, str]:
     """Root endpoint returning API status."""
     return {"message": "Chiral DB Assignment API is running."}
+
+
+@app.post("/query/translate")
+def translate_query_endpoint(request: QueryTranslateRequest) -> dict[str, Any]:
+    """Translate JSON CRUD request into SQL/JSONB query and bind params."""
+    built_query = translate_json_request(request.model_dump(exclude_none=True))
+    return {
+        "sql": built_query.sql,
+        "params": built_query.params,
+    }

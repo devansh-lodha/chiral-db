@@ -44,10 +44,25 @@ ignore = [
     "COM812",  # Trailing comma (conflicts with formatter)
     "ISC001",  # Implicit string concatenation (conflicts with formatter)
     "S608",
+    "PLR2004",
+    "PLR0913",# too many arguments
+    "PLR0912",# too many branches
+    "PLR0915",# too many statements
+    "E501",   # line too long
+    "C901",   # complex functions
+    "BLE001", # broad exception
+    "T201",   # print statements
+    "BLE001", # broad exception
+    "FBT003", # boolean positional args
+    "D103",   # missing docstrings
+    "S603", "S607", "S310",   # subprocess security (ignore)
+    "ANN401",                 # Any typing
+    "FBT001",                 # boolean args
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "D"]
+"demo2.py" = ["ALL"]
 
 [tool.ruff.format]
 quote-style = "double"

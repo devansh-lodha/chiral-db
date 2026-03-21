@@ -42,17 +42,17 @@ clean:
 # Run the full end-to-end demo
 demo:
     @uv run python -c "from pathlib import Path; import sys; print('Error: .env not found') or sys.exit(1) if not Path('.env').exists() else None"
-    
+
     @echo "Cleaning up old instances..."
     docker compose down -v
     @uv run python scripts/manage.py stop
 
     @echo "Checking for remaining port conflicts..."
     @uv run python check_ports.py || (echo "ERROR: Ports occupied. Stop local DBs." && exit 1)
-    
+
     @echo "Starting Databases..."
     docker compose up -d
-    
+
     @echo "Starting Chiral API & Simulation..."
     @uv run python scripts/manage.py demo-start
 
@@ -69,6 +69,37 @@ demo:
     @uv run python verify_assignment.py
 
     @echo "Demo Complete. Servers are running in background. Run 'just stop' to kill them."
+
+# Run full demo + formatted metadata and 10 example queries
+demo2:
+    @uv run python -c "from pathlib import Path; import sys; print('Error: .env not found') or sys.exit(1) if not Path('.env').exists() else None"
+
+    @echo "Cleaning up old instances..."
+    docker compose down -v
+    @uv run python scripts/manage.py stop
+
+    @echo "Checking for remaining port conflicts..."
+    @uv run python check_ports.py || (echo "ERROR: Ports occupied. Stop local DBs." && exit 1)
+
+    @echo "Starting Databases..."
+    docker compose up -d
+
+    @echo "Starting Chiral API & Simulation..."
+    @uv run python scripts/manage.py demo-start
+
+    @echo "Waiting for services to initialize..."
+    @uv run python scripts/manage.py wait
+
+    @echo "Running Data Feeder (1000 records)..."
+    @uv run python feed_data.py
+
+    @echo "Waiting for background workers to finish..."
+    @uv run python -c "import time; time.sleep(10)"
+
+    @echo "Running DEMO2 showcase (formatted metadata + 10 example queries)..."
+    @uv run python demo2.py
+
+    @echo "Demo2 Complete. Servers are running in background. Run 'just stop' to kill them."
 
 # Stop the background servers
 stop:

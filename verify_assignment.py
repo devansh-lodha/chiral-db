@@ -54,7 +54,9 @@ async def verify() -> None:
     async with engine.connect() as conn:
         try:
             res = await conn.execute(
-                text("SELECT COUNT(*) FROM chiral_data WHERE overflow_data IS NOT NULL AND overflow_data != '{}'::jsonb")
+                text(
+                    "SELECT COUNT(*) FROM chiral_data WHERE overflow_data IS NOT NULL AND overflow_data != '{}'::jsonb"
+                )
             )
             overflow_count = res.scalar()
             logger.info("\n[JSONB OVERFLOW] Semi-Structured/Overflow Storage")
