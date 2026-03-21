@@ -22,7 +22,6 @@ from chiral.domain.normalization import (
     evaluate_jsonb_strategy,
     infer_dominant_type,
 )
-from chiral.utils.heuristics import calculate_entropy
 
 ANALYSIS_METADATA_KEY = "__analysis_metadata__"
 
@@ -77,9 +76,6 @@ async def analyze_staging(
         uniqueness_confidence = calculate_uniqueness_confidence(values, total_docs)
         is_unique = uniqueness_confidence >= policy.uniqueness_confidence_threshold
 
-        # Entropy Calculation
-        entropy = calculate_entropy(values)
-
         # Type Inference
         type_decision = infer_dominant_type(values)
         inferred_type = type_decision.inferred_type
@@ -89,7 +85,6 @@ async def analyze_staging(
         # Placement Decision (Phase 4 explicit JSONB strategy)
         strategy_decision = evaluate_jsonb_strategy(
             inferred_type=inferred_type,
-            entropy=entropy,
             type_confidence=type_decision.confidence,
             max_nesting_depth=max_nesting_depth,
             field_stability_ratio=field_stability_ratio,
@@ -99,7 +94,6 @@ async def analyze_staging(
         analysis_result[col_name] = {
             "unique": is_unique,
             "unique_confidence": uniqueness_confidence,
-            "entropy": entropy,
             "target": strategy_decision.target,
             "routing_reason": strategy_decision.routing_reason,
             "type": inferred_type,
@@ -110,7 +104,6 @@ async def analyze_staging(
                 "type_reason": type_decision.reason,
                 "tie_break_applied": type_decision.tie_break_applied,
                 "strategy_rule": strategy_decision.strategy_rule,
-                "entropy_threshold": policy.entropy_threshold,
                 "type_confidence_threshold": policy.type_confidence_threshold,
                 "uniqueness_confidence_threshold": policy.uniqueness_confidence_threshold,
                 "nesting_depth_threshold": policy.nesting_depth_threshold,
@@ -158,7 +151,6 @@ def infer_type(values: list[Any]) -> str:
 def _build_normalization_policy() -> NormalizationPolicy:
     """Build normalization policy from environment or default phase-4 values."""
     return NormalizationPolicy(
-        entropy_threshold=float(os.getenv("ROUTING_ENTROPY_THRESHOLD", "0.0")),
         type_confidence_threshold=float(os.getenv("ROUTING_TYPE_CONFIDENCE_THRESHOLD", "0.8")),
         uniqueness_confidence_threshold=float(os.getenv("ROUTING_STABILITY_THRESHOLD", "1.0")),
         nesting_depth_threshold=int(os.getenv("ROUTING_NESTING_DEPTH_THRESHOLD", "2")),

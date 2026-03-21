@@ -286,6 +286,7 @@ async def show_example_queries(decomposition_plan: dict[str, Any]) -> None:
         sample_rows = rows[:3]
 
         print(f"\n{label}")
+        print(f"- JSON Input: {_pretty_json(payload)}")
         print(f"- SQL: {result.get('sql', '<n/a>')}")
         print(f"- Params: {_pretty_json(result.get('params', {}))}")
         if "error" in result:

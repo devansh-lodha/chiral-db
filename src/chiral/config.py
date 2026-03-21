@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
 
     # Routing placeholders for upcoming schema/routing tuning phases
-    ROUTING_ENTROPY_THRESHOLD: float = 0.0
     ROUTING_STABILITY_THRESHOLD: float = 1.0
     ROUTING_TYPE_DRIFT_THRESHOLD: float = 0.0
     ROUTING_TYPE_CONFIDENCE_THRESHOLD: float = 0.8

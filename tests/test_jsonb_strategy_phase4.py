@@ -32,7 +32,6 @@ def test_jsonb_strategy_routes_nested_to_jsonb() -> None:
     policy = NormalizationPolicy(nesting_depth_threshold=1)
     decision = evaluate_jsonb_strategy(
         inferred_type="dict",
-        entropy=0.0,
         type_confidence=1.0,
         max_nesting_depth=2,
         field_stability_ratio=1.0,
@@ -48,7 +47,6 @@ def test_jsonb_strategy_routes_low_stability_to_jsonb() -> None:
     policy = NormalizationPolicy(field_stability_ratio_threshold=0.75)
     decision = evaluate_jsonb_strategy(
         inferred_type="int",
-        entropy=0.0,
         type_confidence=1.0,
         max_nesting_depth=0,
         field_stability_ratio=0.5,
@@ -62,13 +60,11 @@ def test_jsonb_strategy_routes_low_stability_to_jsonb() -> None:
 def test_jsonb_strategy_routes_stable_scalar_to_sql() -> None:
     """Stable scalar fields should stay in SQL."""
     policy = NormalizationPolicy(
-        entropy_threshold=0.1,
         type_confidence_threshold=0.8,
         field_stability_ratio_threshold=0.75,
     )
     decision = evaluate_jsonb_strategy(
         inferred_type="int",
-        entropy=0.0,
         type_confidence=1.0,
         max_nesting_depth=0,
         field_stability_ratio=1.0,

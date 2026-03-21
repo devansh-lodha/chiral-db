@@ -32,20 +32,18 @@ def test_infer_dominant_type_tie_defaults_to_str() -> None:
 
 
 def test_decide_storage_target_uses_nested_and_thresholds() -> None:
-    """Routing should favor JSONB for nested, drift-prone, or high-entropy fields."""
-    policy = NormalizationPolicy(
-        entropy_threshold=0.1, type_confidence_threshold=0.8, uniqueness_confidence_threshold=1.0
-    )
+    """Routing should favor JSONB for nested, or drift-prone fields."""
+    policy = NormalizationPolicy(type_confidence_threshold=0.8, uniqueness_confidence_threshold=1.0)
 
-    nested_target, nested_reason = decide_storage_target("dict", entropy=0.0, type_confidence=1.0, policy=policy)
+    nested_target, nested_reason = decide_storage_target("dict", type_confidence=1.0, policy=policy)
     assert nested_target == StorageTarget.JSONB.value
     assert nested_reason == RoutingReason.NESTED_STRUCTURE.value
 
-    drift_target, drift_reason = decide_storage_target("int", entropy=0.0, type_confidence=0.5, policy=policy)
+    drift_target, drift_reason = decide_storage_target("int", type_confidence=0.5, policy=policy)
     assert drift_target == StorageTarget.JSONB.value
     assert drift_reason == RoutingReason.TYPE_DRIFT.value
 
-    stable_target, stable_reason = decide_storage_target("int", entropy=0.0, type_confidence=1.0, policy=policy)
+    stable_target, stable_reason = decide_storage_target("int", type_confidence=1.0, policy=policy)
     assert stable_target == StorageTarget.SQL.value
     assert stable_reason == RoutingReason.STABLE_SCALAR.value
 
