@@ -34,6 +34,15 @@ Base URL (local): `http://127.0.0.1:8000`
 
 Use only the fields needed for the selected operation.
 
+### Decomposition Plan Resolution (important)
+
+- You do **not** need to send `decomposition_plan` in query requests.
+- For `read` / `update` / `delete`, query execution auto-loads the decomposition plan from `session_metadata.schema_json.__analysis_metadata__.decomposition_plan` using `session_id` found in the request.
+- If a request already contains `decomposition_plan`, that value is used directly.
+- If no plan is found for the session, child-prefixed fields (for example `comments.comment_id`) cannot be resolved.
+
+To allow child-field filters without explicitly passing `decomposition_plan`, include `session_id` in request filters (or top-level `session_id`).
+
 ---
 
 ## Filter Operators
@@ -225,6 +234,25 @@ Validation failure shape for `create`:
 }
 ```
 
+### Update with child filter (no client plan required)
+
+```json
+{
+  "operation": "update",
+  "table": "chiral_data",
+  "updates": {
+    "username": "renamed_user"
+  },
+  "filters": [
+    {"field": "session_id", "op": "eq", "value": "session_assignment_2"},
+    {"field": "comments.comment_id", "op": "eq", "value": 30}
+  ]
+}
+```
+
+Note:
+- For `update`/`delete`, child-field filters are translated as `EXISTS (...)` subqueries against inferred child tables, not as top-level joins.
+
 ---
 
 ## 4) Delete Query
@@ -236,6 +264,20 @@ Validation failure shape for `create`:
   "filters": [
     {"field": "session_id", "op": "eq", "value": "session_assignment_2"},
     {"field": "username", "op": "eq", "value": "renamed_user"}
+  ]
+}
+```
+
+### Delete with child filter (your use case)
+
+```json
+{
+  "session_id": "session_assignment_2",
+  "operation": "delete",
+  "table": "chiral_data",
+  "filters": [
+    {"field": "session_id", "op": "eq", "value": "session_assignment_2"},
+    {"field": "comments.comment_id", "op": "eq", "value": 30}
   ]
 }
 ```
@@ -282,3 +324,4 @@ curl -X POST http://127.0.0.1:8000/query/execute \
 - Using `contains` on non-JSONB fields.
 - Using non-numeric filter values for numeric range operations on JSONB paths.
 - Misspelling filter operator names (`gte` not `=>`, `eq` not `=`).
+- Omitting `session_id` when relying on metadata auto-hydration for child-prefixed fields.

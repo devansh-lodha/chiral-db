@@ -120,7 +120,7 @@ class CrudQueryBuilder:
             set_clauses.append(f'"{key}" = :set_{key}')
             params[f"set_{key}"] = value
 
-        where_sql, where_params = self._build_where_clause(filters or [], use_table_qualification=False)
+        where_sql, where_params = self._build_where_clause_for_write(filters or [])
         params.update(where_params)
 
         sql = f'UPDATE "{self.table_name}" SET {", ".join(set_clauses)}'
@@ -130,11 +130,148 @@ class CrudQueryBuilder:
 
     def build_delete(self, filters: list[dict[str, Any]] | None = None) -> BuiltQuery:
         """Build a DELETE query with optional filters."""
-        where_sql, params = self._build_where_clause(filters or [], use_table_qualification=False)
+        where_sql, params = self._build_where_clause_for_write(filters or [])
         sql = f'DELETE FROM "{self.table_name}"'
         if where_sql:
             sql += f" WHERE {where_sql}"
         return BuiltQuery(sql=sql, params=params)
+
+    def _build_where_clause_for_write(self, filters: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+        clauses: list[str] = []
+        params: dict[str, Any] = {}
+
+        base_filters: list[dict[str, Any]] = []
+        join_filters_by_prefix: dict[str, list[dict[str, Any]]] = {}
+
+        for spec in filters:
+            field = spec.get("field")
+            if isinstance(field, str) and "." in field:
+                prefix, _ = field.split(".", 1)
+                if prefix in self._join_by_source_field:
+                    join_filters_by_prefix.setdefault(prefix, []).append(spec)
+                    continue
+            base_filters.append(spec)
+
+        base_sql, base_params = self._build_where_clause(
+            base_filters,
+            use_table_qualification=False,
+            param_offset=0,
+        )
+        if base_sql:
+            clauses.append(base_sql)
+        params.update(base_params)
+
+        param_offset = len(base_filters)
+        for prefix, prefix_filters in join_filters_by_prefix.items():
+            join = self._join_by_source_field[prefix]
+            _validate_identifier(join.child_table)
+            _validate_identifier(join.parent_fk_column)
+
+            alias = f"{self._join_alias(prefix)}_w"
+            child_where_sql, child_params = self._build_join_where_clause(
+                join=join,
+                alias=alias,
+                source_field=prefix,
+                filters=prefix_filters,
+                param_offset=param_offset,
+            )
+            param_offset += len(prefix_filters)
+
+            exists_clause = (
+                f'EXISTS (SELECT 1 FROM "{join.child_table}" AS "{alias}" '
+                f'WHERE "{alias}"."{join.parent_fk_column}" = "{self.table_name}"."id"'
+            )
+            if child_where_sql:
+                exists_clause += f" AND {child_where_sql}"
+            exists_clause += ")"
+
+            clauses.append(exists_clause)
+            params.update(child_params)
+
+        return " AND ".join(clauses), params
+
+    def _build_join_where_clause(
+        self,
+        *,
+        join: InferredJoin,
+        alias: str,
+        source_field: str,
+        filters: list[dict[str, Any]],
+        param_offset: int,
+    ) -> tuple[str, dict[str, Any]]:
+        clauses: list[str] = []
+        params: dict[str, Any] = {}
+
+        for index, spec in enumerate(filters):
+            field = spec.get("field")
+            op = str(spec.get("op", "eq")).lower()
+            value = spec.get("value")
+
+            if not isinstance(field, str):
+                msg = "Filter field must be a string"
+                raise TypeError(msg)
+
+            prefix, rest = field.split(".", 1)
+            if prefix != source_field:
+                msg = f"Unexpected join filter prefix: {prefix}"
+                raise ValueError(msg)
+
+            expression, is_jsonb, expected_type = self._resolve_join_where_expression(
+                join=join,
+                alias=alias,
+                field_suffix=rest,
+            )
+            param_name = f"p_{param_offset + index}"
+
+            if is_jsonb and op in {"gt", "gte", "lt", "lte"}:
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    msg = f"JSONB range operation '{op}' requires numeric filter value"
+                    raise ValueError(msg)
+
+                numeric_expr = f"({expression})::double precision"
+                numeric_guard = f"({expression}) ~ '{NUMERIC_TEXT_RE}'"
+
+                if op == "gt":
+                    clauses.append(f"({numeric_guard} AND {numeric_expr} > :{param_name})")
+                elif op == "gte":
+                    clauses.append(f"({numeric_guard} AND {numeric_expr} >= :{param_name})")
+                elif op == "lt":
+                    clauses.append(f"({numeric_guard} AND {numeric_expr} < :{param_name})")
+                elif op == "lte":
+                    clauses.append(f"({numeric_guard} AND {numeric_expr} <= :{param_name})")
+
+                params[param_name] = float(value)
+                continue
+
+            if op == "eq":
+                clauses.append(f"{expression} = :{param_name}")
+                params[param_name] = self._coerce_filter_value(value, expected_type, op)
+            elif op == "ne":
+                clauses.append(f"{expression} != :{param_name}")
+                params[param_name] = self._coerce_filter_value(value, expected_type, op)
+            elif op == "gt":
+                clauses.append(f"{expression} > :{param_name}")
+                params[param_name] = self._coerce_filter_value(value, expected_type, op)
+            elif op == "gte":
+                clauses.append(f"{expression} >= :{param_name}")
+                params[param_name] = self._coerce_filter_value(value, expected_type, op)
+            elif op == "lt":
+                clauses.append(f"{expression} < :{param_name}")
+                params[param_name] = self._coerce_filter_value(value, expected_type, op)
+            elif op == "lte":
+                clauses.append(f"{expression} <= :{param_name}")
+                params[param_name] = self._coerce_filter_value(value, expected_type, op)
+            elif op == "contains":
+                if not is_jsonb:
+                    msg = "contains is only supported for overflow_data.<key> filters"
+                    raise ValueError(msg)
+                clauses.append(f'"{alias}"."overflow_data" @> :{param_name}::jsonb')
+                params[param_name] = value
+            else:
+                msg = f"Unsupported filter operation: {op}"
+                raise ValueError(msg)
+
+        return " AND ".join(clauses), params
 
     def _build_select_list(self, select_fields: list[str], *, use_table_qualification: bool) -> str:
         if select_fields == ["*"]:
@@ -161,6 +298,7 @@ class CrudQueryBuilder:
         filters: list[dict[str, Any]],
         *,
         use_table_qualification: bool,
+        param_offset: int = 0,
     ) -> tuple[str, dict[str, Any]]:
         clauses: list[str] = []
         params: dict[str, Any] = {}
@@ -175,7 +313,7 @@ class CrudQueryBuilder:
                 raise TypeError(msg)
 
             expression, is_jsonb, expected_type = self._resolve_where_expression(field, use_table_qualification)
-            param_name = f"p_{index}"
+            param_name = f"p_{param_offset + index}"
 
             if is_jsonb and op in {"gt", "gte", "lt", "lte"}:
                 if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -235,6 +373,26 @@ class CrudQueryBuilder:
                 raise ValueError(msg)
 
         return " AND ".join(clauses), params
+
+    def _resolve_join_where_expression(
+        self,
+        *,
+        join: InferredJoin,
+        alias: str,
+        field_suffix: str,
+    ) -> tuple[str, bool, str | None]:
+        if field_suffix.startswith("overflow_data."):
+            json_key = field_suffix.split(".", 1)[1]
+            _validate_identifier(json_key)
+            return f'"{alias}"."overflow_data"->>\'{json_key}\'', True, None
+
+        _validate_identifier(field_suffix)
+        expected_type = None
+        if isinstance(join.child_column_types, dict):
+            raw_type = join.child_column_types.get(field_suffix)
+            if isinstance(raw_type, str):
+                expected_type = raw_type
+        return f'"{alias}"."{field_suffix}"', False, expected_type
 
     def _build_joins_clause(self) -> str:
         if not self.inferred_joins:

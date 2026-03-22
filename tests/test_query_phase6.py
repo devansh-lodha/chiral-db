@@ -99,6 +99,73 @@ def test_translate_json_request_delete() -> None:
     assert built.params["p_0"] == "abc"
 
 
+def test_translate_json_request_delete_with_child_filter_uses_exists() -> None:
+    """Delete with decomposition child filter should compile to EXISTS instead of join alias."""
+    built = translate_json_request(
+        {
+            "operation": "delete",
+            "table": "chiral_data",
+            "filters": [
+                {"field": "session_id", "op": "eq", "value": "session_assignment_2"},
+                {"field": "comments.comment_id", "op": "eq", "value": 30},
+            ],
+            "decomposition_plan": {
+                "version": 1,
+                "parent_table": "chiral_data",
+                "entities": [
+                    {
+                        "source_field": "comments",
+                        "child_table": "chiral_data_comments",
+                        "child_columns": ["comment_id", "text"],
+                        "child_column_types": {"comment_id": "int", "text": "str"},
+                    }
+                ],
+            },
+        }
+    )
+
+    assert built.sql.startswith('DELETE FROM "chiral_data"')
+    assert 'EXISTS (SELECT 1 FROM "chiral_data_comments" AS "j_comments_w"' in built.sql
+    assert '"j_comments_w"."chiral_data_id" = "chiral_data"."id"' in built.sql
+    assert '"j_comments_w"."comment_id" = :p_1' in built.sql
+    assert built.params["p_0"] == "session_assignment_2"
+    assert built.params["p_1"] == 30
+
+
+def test_translate_json_request_update_with_child_filter_uses_exists() -> None:
+    """Update with decomposition child filter should compile to EXISTS against child table."""
+    built = translate_json_request(
+        {
+            "operation": "update",
+            "table": "chiral_data",
+            "updates": {"username": "updated"},
+            "filters": [
+                {"field": "session_id", "op": "eq", "value": "session_assignment_2"},
+                {"field": "comments.comment_id", "op": "eq", "value": "30"},
+            ],
+            "decomposition_plan": {
+                "version": 1,
+                "parent_table": "chiral_data",
+                "entities": [
+                    {
+                        "source_field": "comments",
+                        "child_table": "chiral_data_comments",
+                        "child_columns": ["comment_id"],
+                        "child_column_types": {"comment_id": "int"},
+                    }
+                ],
+            },
+        }
+    )
+
+    assert built.sql.startswith('UPDATE "chiral_data" SET')
+    assert 'EXISTS (SELECT 1 FROM "chiral_data_comments" AS "j_comments_w"' in built.sql
+    assert '"j_comments_w"."comment_id" = :p_1' in built.sql
+    assert built.params["set_username"] == "updated"
+    assert built.params["p_0"] == "session_assignment_2"
+    assert built.params["p_1"] == 30
+
+
 def test_jsonb_numeric_range_filter_is_type_safe() -> None:
     """JSONB range filters should cast only numeric values and guard non-numeric text."""
     builder = CrudQueryBuilder()
