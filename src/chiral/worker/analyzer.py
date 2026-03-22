@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chiral.db.sessions import session
 from chiral.domain.normalization import (
     NormalizationPolicy,
-    calculate_field_stability_ratio,
+    # calculate_field_stability_ratio,
     calculate_max_nesting_depth,
     calculate_uniqueness_confidence,
     detect_repeating_entities,
@@ -80,14 +80,14 @@ async def analyze_staging(
         type_decision = infer_dominant_type(values)
         inferred_type = type_decision.inferred_type
         max_nesting_depth = calculate_max_nesting_depth(values)
-        field_stability_ratio = calculate_field_stability_ratio(values, type_decision.confidence)
+        # field_stability_ratio = calculate_field_stability_ratio(values, type_decision.confidence)
 
         # Placement Decision (Explicit JSONB strategy)
         strategy_decision = evaluate_jsonb_strategy(
             inferred_type=inferred_type,
             type_confidence=type_decision.confidence,
             max_nesting_depth=max_nesting_depth,
-            field_stability_ratio=field_stability_ratio,
+            # field_stability_ratio=field_stability_ratio,
             policy=policy,
         )
 
@@ -99,7 +99,7 @@ async def analyze_staging(
             "type": inferred_type,
             "type_confidence": type_decision.confidence,
             "max_nesting_depth": max_nesting_depth,
-            "field_stability_ratio": field_stability_ratio,
+            # "field_stability_ratio": field_stability_ratio,
             "explainability": {
                 "type_reason": type_decision.reason,
                 "tie_break_applied": type_decision.tie_break_applied,
@@ -107,7 +107,7 @@ async def analyze_staging(
                 "type_confidence_threshold": policy.type_confidence_threshold,
                 "uniqueness_confidence_threshold": policy.uniqueness_confidence_threshold,
                 "nesting_depth_threshold": policy.nesting_depth_threshold,
-                "field_stability_ratio_threshold": policy.field_stability_ratio_threshold,
+                # "field_stability_ratio_threshold": policy.field_stability_ratio_threshold,
             },
         }
 
@@ -152,8 +152,8 @@ def infer_type(values: list[Any]) -> str:
 def _build_normalization_policy() -> NormalizationPolicy:
     """Build normalization policy from environment or default phase-4 values."""
     return NormalizationPolicy(
-        type_confidence_threshold=float(os.getenv("ROUTING_TYPE_CONFIDENCE_THRESHOLD", "0.8")),
+        type_confidence_threshold=float(os.getenv("ROUTING_TYPE_CONFIDENCE_THRESHOLD", "1.0")),
         uniqueness_confidence_threshold=float(os.getenv("ROUTING_STABILITY_THRESHOLD", "1.0")),
         nesting_depth_threshold=int(os.getenv("ROUTING_NESTING_DEPTH_THRESHOLD", "1")),
-        field_stability_ratio_threshold=float(os.getenv("ROUTING_FIELD_STABILITY_RATIO_THRESHOLD", "0.75")),
+        # field_stability_ratio_threshold=float(os.getenv("ROUTING_FIELD_STABILITY_RATIO_THRESHOLD", "0.75")),
     )

@@ -15,10 +15,10 @@ from .routing import RoutingReason, StorageTarget
 class NormalizationPolicy:
     """Threshold policy for deterministic normalization and routing."""
 
-    type_confidence_threshold: float = 0.8
+    type_confidence_threshold: float = 1.0
     uniqueness_confidence_threshold: float = 1.0
     nesting_depth_threshold: int = 1
-    field_stability_ratio_threshold: float = 0.75
+    # field_stability_ratio_threshold: float = 0.75
 
 
 @dataclass(frozen=True)
@@ -137,25 +137,25 @@ def calculate_max_nesting_depth(values: list[Any]) -> int:
     return max(_depth(value) for value in values)
 
 
-def calculate_field_stability_ratio(values: list[Any], type_confidence: float) -> float:
-    """Calculate field stability ratio from value presence and type confidence.
+# def calculate_field_stability_ratio(values: list[Any], type_confidence: float) -> float:
+#     """Calculate field stability ratio from value presence and type confidence.
 
-    Stability ratio is defined as:
-    (non_null_ratio) * (dominant_type_confidence)
-    """
-    if not values:
-        return 0.0
+#     Stability ratio is defined as:
+#     (non_null_ratio) * (dominant_type_confidence)
+#     """
+#     if not values:
+#         return 0.0
 
-    non_null_count = len([value for value in values if value is not None])
-    non_null_ratio = non_null_count / len(values)
-    return non_null_ratio * type_confidence
+#     non_null_count = len([value for value in values if value is not None])
+#     non_null_ratio = non_null_count / len(values)
+#     return non_null_ratio * type_confidence
 
 
 def evaluate_jsonb_strategy(
     inferred_type: str,
     type_confidence: float,
     max_nesting_depth: int,
-    field_stability_ratio: float,
+    # field_stability_ratio: float,
     policy: NormalizationPolicy,
 ) -> JsonbStrategyDecision:
     """Evaluate explicit strategy rules for SQL vs JSONB field routing."""
@@ -166,19 +166,26 @@ def evaluate_jsonb_strategy(
             strategy_rule="nesting_depth_threshold_exceeded",
         )
 
-    if field_stability_ratio < policy.field_stability_ratio_threshold:
+    if type_confidence < 1.0:
         return JsonbStrategyDecision(
             target=StorageTarget.JSONB.value,
             routing_reason=RoutingReason.TYPE_DRIFT.value,
-            strategy_rule="low_field_stability_ratio",
+            strategy_rule="heterogeneous_scalar_types",
         )
 
-    if type_confidence < policy.type_confidence_threshold:
-        return JsonbStrategyDecision(
-            target=StorageTarget.JSONB.value,
-            routing_reason=RoutingReason.TYPE_DRIFT.value,
-            strategy_rule="low_type_confidence",
-        )
+    # if field_stability_ratio < policy.field_stability_ratio_threshold:
+    #     return JsonbStrategyDecision(
+    #         target=StorageTarget.JSONB.value,
+    #         routing_reason=RoutingReason.TYPE_DRIFT.value,
+    #         strategy_rule="low_field_stability_ratio",
+    #     )
+
+    # if type_confidence < policy.type_confidence_threshold:
+    #     return JsonbStrategyDecision(
+    #         target=StorageTarget.JSONB.value,
+    #         routing_reason=RoutingReason.TYPE_DRIFT.value,
+    #         strategy_rule="low_type_confidence",
+    #     )
 
     return JsonbStrategyDecision(
         target=StorageTarget.SQL.value,
@@ -192,14 +199,14 @@ def decide_storage_target(
     type_confidence: float,
     policy: NormalizationPolicy,
     max_nesting_depth: int = 0,
-    field_stability_ratio: float = 1.0,
+    # field_stability_ratio: float = 1.0,
 ) -> tuple[str, str]:
     """Backwards-compatible target decision helper returning target and reason only."""
     decision = evaluate_jsonb_strategy(
         inferred_type=inferred_type,
         type_confidence=type_confidence,
         max_nesting_depth=max_nesting_depth,
-        field_stability_ratio=field_stability_ratio,
+        # field_stability_ratio=field_stability_ratio,
         policy=policy,
     )
     return decision.target, decision.routing_reason
