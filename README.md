@@ -267,9 +267,12 @@ just down
    - **DELETE**: Cascades to child tables via FK constraints.
 
 4. **Execution** (`execute_json_request`):
-   - Translates request to SQL + params.
-   - Executes via async SQLAlchemy session.
-   - Returns `{rows, row_count}` for read or `{affected_rows}` for write.
+    - Translates request to SQL + params for `read/update/delete` and routes `create` through create orchestration.
+    - Executes via async SQLAlchemy session with bounded create-time analysis and deterministic fallback rules.
+    - Returns:
+      - `read`: `{rows, row_count}`
+      - `update/delete`: `{affected_rows}`
+      - `create`: `{affected_rows, mode, parent_id, child_insert_counts}` where mode is `migrated_sync` or `queued_async`
 
 **Example**:
 ```json
@@ -350,7 +353,7 @@ WHERE child.score > 50
     - `POST /ingest`: Route for accepting JSON records (async, returns 202 Accepted).
     - `POST /flush/{session_id}`: Signal to finalize and persist session.
     - `POST /query/translate`: Translate JSON query request to SQL (for inspection).
-    - `POST /query/execute`: Translate + execute JSON query request (returns rows).
+    - `POST /query/execute`: Translate + execute JSON query request (read rows, write effects, create migration modes).
     - `GET /schema/{session_id}`: Retrieve evolved schema metadata.
 
 ### Schema & Database
@@ -371,7 +374,7 @@ WHERE child.score > 50
 *   `src/chiral/core/query_service.py`: **JSON-to-SQL translation & execution engine.** Core functions:
     - `translate_json_request(request)`: Maps JSON CRUD to `BuiltQuery` (sql + params).
     - `_build_inferred_joins_for_request(request, table_name)`: Auto-detects child field references; returns list of `InferredJoin` objects.
-    - `execute_json_request(request, sql_session)`: End-to-end translate + execute; returns rows/affected_rows.
+    - `execute_json_request(request, sql_session)`: End-to-end translate + execute; includes create orchestration with metadata hydration, sync migration path, and queued async fallback.
 
 *   `src/chiral/db/query_builder.py`: **SQL generation for CRUD operations.** Classes:
     - `CrudQueryBuilder`: Builds SELECT/INSERT/UPDATE/DELETE SQL.

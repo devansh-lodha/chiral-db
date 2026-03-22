@@ -82,7 +82,7 @@ async def analyze_staging(
         max_nesting_depth = calculate_max_nesting_depth(values)
         field_stability_ratio = calculate_field_stability_ratio(values, type_decision.confidence)
 
-        # Placement Decision (Phase 4 explicit JSONB strategy)
+        # Placement Decision (Explicit JSONB strategy)
         strategy_decision = evaluate_jsonb_strategy(
             inferred_type=inferred_type,
             type_confidence=type_decision.confidence,

@@ -199,6 +199,126 @@ def cast_value(value: object, expected_type: str) -> object:
     return str(value)
 
 
+def _sql_data_type_to_analysis_type(data_type: str) -> str:
+    normalized = data_type.strip().lower()
+    if normalized in {"smallint", "integer", "bigint"}:
+        return "int"
+    if normalized in {"real", "double precision", "numeric", "decimal"}:
+        return "float"
+    if normalized in {"boolean"}:
+        return "bool"
+    return "str"
+
+
+async def _load_parent_analysis_from_table(
+    sql_session: AsyncSession,
+    table_name: str,
+) -> dict[str, Any]:
+    result = await sql_session.execute(
+        text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = :table_name"),
+        {"table_name": table_name},
+    )
+
+    analysis: dict[str, Any] = {}
+    for column_name, data_type in result.fetchall():
+        if not isinstance(column_name, str):
+            continue
+        if column_name in {"id", "overflow_data", "session_id", "username", "sys_ingested_at", "t_stamp"}:
+            continue
+        inferred_type = _sql_data_type_to_analysis_type(str(data_type))
+        analysis[column_name] = {
+            "target": "sql",
+            "type": inferred_type,
+        }
+
+    return analysis
+
+
+def _build_valid_sql_cols_for_create(analysis: dict[str, Any]) -> list[str]:
+    valid_sql_cols = ["session_id", "username", "sys_ingested_at", "t_stamp"]
+    for col, meta in _iter_field_analysis(analysis):
+        if is_sql_target(meta["target"]) and col not in valid_sql_cols:
+            valid_sql_cols.append(col)
+    return valid_sql_cols
+
+
+async def migrate_single_create_payload(
+    *,
+    payload: dict[str, Any],
+    session_id: str,
+    decomposition_plan: dict[str, Any],
+    table_name: str,
+    sql_session: AsyncSession,
+    max_field_bytes: int,
+    max_nesting_depth: int,
+) -> dict[str, Any]:
+    """Migrate one create payload into parent/child tables using decomposition metadata."""
+    parent_analysis = await _load_parent_analysis_from_table(sql_session, table_name)
+    analysis_with_metadata = dict(parent_analysis)
+    analysis_with_metadata[ANALYSIS_METADATA_KEY] = {
+        "decomposition_plan": decomposition_plan,
+    }
+
+    await materialize_decomposition_tables(sql_session, analysis_with_metadata, parent_table=table_name)
+
+    entities = decomposition_plan.get("entities", [])
+    if not isinstance(entities, list):
+        entities = []
+
+    parent_doc, extracted_children = _extract_decomposed_child_items(dict(payload), entities)
+
+    safety_events: list[dict[str, Any]] = []
+    sql_row, overflow = _process_document(
+        parent_doc,
+        session_id,
+        parent_analysis,
+        max_field_bytes=max_field_bytes,
+        max_nesting_depth=max_nesting_depth,
+        safety_events=safety_events,
+    )
+
+    valid_sql_cols = _build_valid_sql_cols_for_create(parent_analysis)
+    insert_payload = _build_insert_payload(sql_row, overflow, valid_sql_cols)
+    if not insert_payload:
+        msg = "create operation produced empty insert payload after normalization"
+        raise ValueError(msg)
+
+    parent_id = await _insert_row_returning_id(
+        table_name=table_name,
+        payload=insert_payload,
+        sql_session=sql_session,
+    )
+
+    child_insert_counts: dict[str, int] = {}
+    for entity, child_doc in extracted_children:
+        child_insert = _build_child_insert_payload(
+            parent_table=table_name,
+            session_id=session_id,
+            parent_id=parent_id,
+            entity=entity,
+            child_doc=child_doc,
+        )
+        if not child_insert:
+            continue
+
+        child_table, child_payload = child_insert
+        await _insert_dynamic_row(
+            table_name=child_table,
+            payload=child_payload,
+            sql_session=sql_session,
+        )
+
+        source_field = entity.get("source_field")
+        if isinstance(source_field, str) and source_field:
+            child_insert_counts[source_field] = child_insert_counts.get(source_field, 0) + 1
+
+    return {
+        "parent_id": parent_id,
+        "child_insert_counts": child_insert_counts,
+        "safety_event_count": len(safety_events),
+    }
+
+
 def _ensure_system_columns(existing_columns: list[str]) -> tuple[list[str], list[str]]:
     """Ensure system columns exist and return columns to add and valid SQL columns.
 

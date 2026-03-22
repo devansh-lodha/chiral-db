@@ -12,12 +12,16 @@ from typing import Any
 # Add the parent directory (src) to sys.path to allow imports from 'chiral' package
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from chiral.core.ingestion import ingest_data
 from chiral.core.orchestrator import flush_staging, trigger_worker
-from chiral.core.query_service import execute_json_request, translate_json_request_with_metadata
+from chiral.core.query_service import (
+    CreateExecutionValidationError,
+    execute_json_request,
+    translate_json_request_with_metadata,
+)
 
 app = FastAPI(title="Chiral DB Assignment")
 
@@ -80,5 +84,19 @@ async def translate_query_endpoint(request: QueryTranslateRequest) -> dict[str, 
 
 @app.post("/query/execute")
 async def execute_query_endpoint(request: QueryTranslateRequest) -> dict[str, Any]:
-    """Translate and execute JSON CRUD request, returning data or affected rows."""
-    return await execute_json_request(request.model_dump(exclude_none=True))
+    """Translate and execute JSON CRUD request.
+
+    - read: returns rows + row_count
+    - update/delete: returns affected_rows
+    - create: returns mode-aware contract (migrated_sync or queued_async)
+    """
+    try:
+        return await execute_json_request(request.model_dump(exclude_none=True))
+    except CreateExecutionValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "mode": "failed_validation",
+                "error": str(exc),
+            },
+        ) from exc

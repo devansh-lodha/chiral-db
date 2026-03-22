@@ -7,7 +7,9 @@ This file documents how to query Chiral DB using JSON requests.
 - `POST /query/translate`
   - Returns generated SQL + bind params only.
 - `POST /query/execute`
-  - Returns SQL + params + data (`rows`) for reads, or `affected_rows` for writes.
+  - Returns SQL + params + data (`rows`) for reads.
+  - For `create`, returns `affected_rows` plus contract fields: `mode`, `parent_id`, `child_insert_counts`.
+  - For `update`/`delete`, returns `affected_rows`.
 
 Base URL (local): `http://127.0.0.1:8000`
 
@@ -146,6 +148,61 @@ Note:
     "sys_ingested_at": 1742643301.25,
     "t_stamp": 1742643301.25,
     "overflow_data": "{}"
+  }
+}
+```
+
+Create execute response (`mode: "migrated_sync"`):
+
+```json
+{
+  "sql": "INSERT INTO ...",
+  "params": {"session_id": "session_assignment_2", "username": "new_user"},
+  "affected_rows": 1,
+  "mode": "migrated_sync",
+  "parent_id": null,
+  "child_insert_counts": {}
+}
+```
+
+Queued create response (`mode: "queued_async"`):
+
+```json
+{
+  "sql": null,
+  "params": {},
+  "affected_rows": 0,
+  "mode": "queued_async",
+  "parent_id": null,
+  "child_insert_counts": {},
+  "queue_reason": "analysis_timeout",
+  "fallback_trigger": "metadata_resolution",
+  "worker_triggered": false,
+  "staging_count": 3
+}
+```
+
+Nested create behavior:
+
+- If nested payload fields are present and decomposition entities are available in metadata, `/query/execute` performs synchronous parent+child migration and returns `mode: "migrated_sync"` with populated `parent_id` and `child_insert_counts`.
+- If nested payload fields are present but decomposition entities are not available yet, request falls back to staging+worker and returns `mode: "queued_async"`.
+- Deterministic fallback triggers also return `mode: "queued_async"` with `queue_reason` and `fallback_trigger`:
+  - `analysis_timeout` (`fallback_trigger: "metadata_resolution"`)
+  - `metadata_lock_contention` (`fallback_trigger: "metadata_resolution"`)
+  - `ddl_conflict` / `retriable_insert_conflict` (`fallback_trigger: "sync_migration"` or `"flat_insert"`)
+
+Rollout safety flag:
+
+- Set `CREATE_ORCHESTRATION_ENABLED=false` to bypass create orchestration and use legacy direct create behavior.
+- Default is enabled (`true`).
+
+Validation failure shape for `create`:
+
+```json
+{
+  "detail": {
+    "mode": "failed_validation",
+    "error": "create operation requires object payload"
   }
 }
 ```

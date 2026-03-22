@@ -34,6 +34,9 @@ dev = [
 line-length = 120
 target-version = "py313"
 
+[tool.ruff.lint.pylint]
+max-returns = 10
+
 [tool.ruff.lint]
 # Enable every single rule in the registry
 select = ["ALL"]
@@ -62,7 +65,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "D", "SLF001"]
+"tests/**/*.py" = ["S101", "D", "SLF001", "EM101", "ARG001", "TRY003"]
 "demo2.py" = ["ALL"]
 
 [tool.ruff.format]
