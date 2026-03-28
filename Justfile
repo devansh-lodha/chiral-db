@@ -27,9 +27,20 @@ test:
 up:
     docker compose up -d
 
+# Build and run webapp dashboard in Docker
+webapp:
+    @echo "Building and starting dashboard container..."
+    docker compose --profile webapp up -d --build dashboard
+    @echo "Dashboard is running at: http://localhost:5173"
+
 # Stop database containers
 down:
     docker compose down
+
+# Stop only the webapp dashboard container
+webapp-stop:
+    docker compose --profile webapp stop dashboard
+    @echo "Dashboard stopped."
 
 # Clean temporary files
 clean:
@@ -111,3 +122,4 @@ stop-ports: stop
 
 # View logs
 logs:
+    docker compose logs -f

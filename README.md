@@ -41,6 +41,21 @@ The following command completely resets the environment, spins up the database, 
 just demo2
 ```
 
+### Run the Webapp Dashboard (Docker)
+To build and run the dashboard in a container and expose it locally:
+
+```bash
+just webapp
+```
+
+Open: **http://localhost:5173**
+
+To stop only the dashboard container:
+
+```bash
+just webapp-stop
+```
+
 **Expected Output:**
 1. Record ingestion logs.
 2. A schema summary demonstrating physical table generation (e.g., `chiral_data`, `chiral_data_comments`, `chiral_data_events`).

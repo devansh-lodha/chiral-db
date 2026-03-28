@@ -16,5 +16,14 @@ services:
       timeout: 5s
       retries: 5
 
+  dashboard:
+    profiles: ["webapp"]
+    build:
+      context: ./webapp/dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
 volumes:
   postgres_data:
