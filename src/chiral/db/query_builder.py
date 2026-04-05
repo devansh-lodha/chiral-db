@@ -23,6 +23,7 @@ class BuiltQuery:
 
     sql: str
     params: dict[str, Any]
+    inferred_joins: list[InferredJoin] | None = None
 
 
 @dataclass(frozen=True)
@@ -82,7 +83,7 @@ class CrudQueryBuilder:
             sql += " OFFSET :offset"
             params["offset"] = offset
 
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def build_insert(self, payload: dict[str, Any]) -> BuiltQuery:
         """Build an INSERT query from payload fields."""
@@ -101,7 +102,7 @@ class CrudQueryBuilder:
             params[key] = value
 
         sql = f'INSERT INTO "{self.table_name}" ({", ".join(columns)}) VALUES ({", ".join(binders)})'
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def build_update(
         self,
@@ -146,7 +147,7 @@ class CrudQueryBuilder:
         sql = f'UPDATE "{self.table_name}" SET {", ".join(set_clauses)}'
         if where_sql:
             sql += f" WHERE {where_sql}"
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def build_delete(self, filters: list[dict[str, Any]] | None = None) -> BuiltQuery:
         """Build a DELETE query with optional filters."""
@@ -154,7 +155,7 @@ class CrudQueryBuilder:
         sql = f'DELETE FROM "{self.table_name}"'
         if where_sql:
             sql += f" WHERE {where_sql}"
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def _build_where_clause_for_write(self, filters: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
         clauses: list[str] = []

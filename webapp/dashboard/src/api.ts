@@ -1,5 +1,3 @@
-/* ─── API utility for communicating with the ChiralDB backend ─── */
-
 const API_BASE = 'http://127.0.0.1:8000';
 
 export interface QueryRequest {
@@ -7,7 +5,7 @@ export interface QueryRequest {
     table?: string;
     session_id?: string;
     select?: string[];
-    filters?: { field: string; operator: string; value: unknown }[];
+    filters?: { field: string; op: string; value: unknown }[];
     payload?: Record<string, unknown>;
     updates?: Record<string, unknown>;
     limit?: number;
@@ -30,60 +28,53 @@ export async function executeQuery(request: QueryRequest): Promise<QueryResponse
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
     });
-
     if (!res.ok) {
         const errBody = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail));
     }
-
     return res.json();
 }
 
-export async function checkHealth(): Promise<boolean> {
-    try {
-        const res = await fetch(`${API_BASE}/`);
-        return res.ok;
-    } catch {
-        return false;
+export async function fetchLogicalFields(sessionId: string): Promise<string[]> {
+    const res = await fetch(`${API_BASE}/schema/logical/${sessionId}`);
+    if (!res.ok) throw new Error('Failed to fetch logical fields');
+    return res.json();
+}
+
+export async function fetchSessions(): Promise<string[]> {
+    const res = await fetch(`${API_BASE}/sessions/active`);
+    if (!res.ok) throw new Error('Failed to fetch active sessions');
+    return res.json();
+}
+
+export interface SessionInfo {
+    session_id: string;
+    record_count: number;
+    status: string;
+    schema_version: number;
+}
+
+export async function fetchSessionInfo(sessionId: string): Promise<SessionInfo> {
+    const req: QueryRequest = {
+        operation: 'read',
+        table: 'session_metadata',
+        filters:[{ field: 'session_id', op: 'eq', value: sessionId }]
+    };
+    const res = await executeQuery(req);
+    if (res.rows && res.rows.length > 0) {
+        return res.rows[0] as unknown as SessionInfo;
     }
+    throw new Error('Session not found');
 }
 
-export interface SchemaColumn {
-    name: string;
-    type: string;
-}
-
-export interface SchemaForeignKey {
-    constrained_columns: string[];
-    referred_table: string;
-    referred_columns: string[];
-}
-
-export interface TableSchema {
-    columns: SchemaColumn[];
-    primary_keys: string[];
-    foreign_keys: SchemaForeignKey[];
-    sampleData?: Record<string, unknown>[];
-}
-
-export type DatabaseSchema = Record<string, TableSchema>;
-
-export async function fetchSchema(): Promise<DatabaseSchema> {
-    const res = await fetch(`${API_BASE}/schema/metadata`, { method: 'GET' });
-    if (!res.ok) throw new Error('Failed to fetch schema');
-    return res.json();
-}
-
-export async function flushSession(sessionId: string): Promise<any> {
+export async function flushSession(sessionId: string): Promise<Record<string, unknown>> {
     const res = await fetch(`${API_BASE}/flush/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
     });
-
     if (!res.ok) {
         const errBody = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail));
     }
-
     return res.json();
 }

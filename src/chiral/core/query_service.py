@@ -728,6 +728,9 @@ def _rewrite_updates_for_jsonb_targets(
     updates: dict[str, Any],
     schema: dict[str, Any],
 ) -> dict[str, Any]:
+    plan = _extract_decomposition_plan_from_schema(schema)
+    child_entities = {e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")}
+
     rewritten: dict[str, Any] = {}
     for key, value in updates.items():
         if not isinstance(key, str):
@@ -738,7 +741,8 @@ def _rewrite_updates_for_jsonb_targets(
             rewritten[key] = value
             continue
 
-        if "." in key:
+        # Do not rewrite child entities or dot-notated fields
+        if "." in key or key in child_entities:
             rewritten[key] = value
             continue
 
@@ -748,6 +752,43 @@ def _rewrite_updates_for_jsonb_targets(
         else:
             rewritten[key] = value
 
+    return rewritten
+
+
+def _rewrite_select_for_jsonb_targets(select_fields: list[str], schema: dict[str, Any]) -> list[str]:
+    plan = _extract_decomposition_plan_from_schema(schema)
+    child_entities = {e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")}
+
+    rewritten = []
+    for field in select_fields:
+        if "." in field or field in child_entities:
+            rewritten.append(field)
+            continue
+        meta = schema.get(field)
+        if isinstance(meta, dict) and str(meta.get("target", "")).lower() == "jsonb":
+            rewritten.append(f"overflow_data.{field}")
+        else:
+            rewritten.append(field)
+    return rewritten
+
+
+def _rewrite_filters_for_jsonb_targets(filters: list[dict[str, Any]], schema: dict[str, Any]) -> list[dict[str, Any]]:
+    plan = _extract_decomposition_plan_from_schema(schema)
+    child_entities = {e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")}
+
+    rewritten = []
+    for f in filters:
+        field = str(f.get("field", ""))
+        if "." in field or field in child_entities:
+            rewritten.append(f)
+            continue
+        meta = schema.get(field)
+        if isinstance(meta, dict) and str(meta.get("target", "")).lower() == "jsonb":
+            new_f = dict(f)
+            new_f["field"] = f"overflow_data.{field}"
+            rewritten.append(new_f)
+        else:
+            rewritten.append(f)
     return rewritten
 
 
@@ -798,6 +839,12 @@ async def _hydrate_request_with_decomposition_plan(
 
     if should_rewrite_updates and loaded_schema is not None and isinstance(updates, dict):
         hydrated["updates"] = _rewrite_updates_for_jsonb_targets(updates, loaded_schema)
+
+    if loaded_schema is not None:
+        if isinstance(request.get("select"), list):
+            hydrated["select"] = _rewrite_select_for_jsonb_targets(request["select"], loaded_schema)
+        if isinstance(request.get("filters"), list):
+            hydrated["filters"] = _rewrite_filters_for_jsonb_targets(request["filters"], loaded_schema)
 
     if not needs_plan_hydration:
         return hydrated
@@ -951,12 +998,40 @@ async def _execute_json_request_impl(
     result = await sql_session.execute(text(built.sql), built.params)
 
     if operation == "read":
-        rows = [dict(row) for row in result.mappings().all()]
+        raw_rows = [dict(row) for row in result.mappings().all()]
+
+        # Phase 2: Logical Data Reconstruction (Merge duplicate parent rows into nested arrays)
+        merged_results = {}
+        child_keys = (
+            [join.source_field for join in built.inferred_joins]
+            if hasattr(built, "inferred_joins") and built.inferred_joins
+            else []
+        )
+
+        for row in raw_rows:
+            # Create a unique hash for the parent entity based on non-child fields
+            parent_tuple = tuple((k, str(v)) for k, v in row.items() if k not in child_keys)
+
+            if parent_tuple not in merged_results:
+                # Initialize the logical parent document
+                merged_results[parent_tuple] = {k: v for k, v in row.items() if k not in child_keys}
+                for child_key in child_keys:
+                    merged_results[parent_tuple][child_key] = []
+
+            # Append child entities to their respective arrays
+            for child_key in child_keys:
+                child_obj = row.get(child_key)
+                if child_obj is not None and child_obj not in merged_results[parent_tuple][child_key]:
+                    # Avoid duplicate child objects in case of multiple joins
+                    merged_results[parent_tuple][child_key].append(child_obj)
+
+        logical_rows = list(merged_results.values())
+
         return {
             "sql": built.sql,
             "params": built.params,
-            "rows": rows,
-            "row_count": len(rows),
+            "rows": logical_rows,
+            "row_count": len(logical_rows),
         }
 
     affected_rows = int(getattr(result, "rowcount", 0) or 0)

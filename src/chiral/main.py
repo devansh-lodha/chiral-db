@@ -114,51 +114,46 @@ async def execute_query_endpoint(request: QueryTranslateRequest) -> dict[str, An
         ) from exc
 
 
-@app.get("/schema/metadata")
-async def schema_metadata_endpoint() -> dict[str, Any]:
-    """Dynamically reflects the live PostgreSQL database schema."""
-
+@app.get("/schema/logical/{session_id}")
+async def logical_schema_endpoint(session_id: str) -> list[str]:
+    """Returns a flat list of all queryable logical fields for the dashboard."""
     @session
-    async def _fetch(sql_session: AsyncSession) -> dict[str, Any]:
-        schema = {}
-
-        # Query all public tables manually to avoid run_sync deadlocks
+    async def _fetch(sql_session: AsyncSession) -> list[str]:
         result = await sql_session.execute(
-            text(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
-            )
+            text("SELECT schema_json FROM session_metadata WHERE session_id = :sid"),
+            {"sid": session_id}
         )
-        valid_tables = [row[0] for row in result.fetchall()]
+        row = result.fetchone()
+        if not row or not row[0]:
+            return ["username", "sys_ingested_at", "t_stamp", "session_id"]
 
-        for t in valid_tables:
-            cols_result = await sql_session.execute(
-                text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = :t"), {"t": t}
-            )
-            cols = [{"name": row[0], "type": row[1]} for row in cols_result.fetchall()]
+        import json
+        schema_json = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+        fields = ["username", "sys_ingested_at", "t_stamp", "session_id"]
 
-            # Fetch 3 preview rows to populate the schema node hover views dynamically!
-            try:
-                sample_result = await sql_session.execute(text(f"SELECT * FROM {t} LIMIT 3"))
-                # JSON serialize simple types for UI compatibility
-                sample_data = []
-                for row in sample_result.fetchall():
-                    row_dict = {}
-                    for i, key in enumerate(sample_result.keys()):
-                        val = row[i]
-                        if isinstance(val, (dict, list, str, int, float, bool)) or val is None:
-                            row_dict[key] = val
-                        else:
-                            row_dict[key] = str(val)
-                    sample_data.append(row_dict)
-            except Exception:
-                sample_data = []
+        for key, meta in schema_json.items():
+            if key == "__analysis_metadata__":
+                plan = meta.get("decomposition_plan", {})
+                for entity in plan.get("entities", []):
+                    source = entity.get("source_field")
+                    if source and source not in fields:
+                        fields.append(source)
+                    for child_col in entity.get("child_columns", []):
+                        fields.append(f"{source}.{child_col}")
+                continue
 
-            schema[t] = {
-                "columns": cols,
-                "primary_keys": ["id" if t != "session_metadata" else "session_id"],
-                "foreign_keys": [],
-                "sampleData": sample_data,
-            }
-        return schema
+            if key not in fields:
+                fields.append(key)
+
+        return sorted(fields)
+    return await _fetch()
+
+
+@app.get("/sessions/active")
+async def active_sessions_endpoint() -> list[str]:
+    @session
+    async def _fetch(sql_session: AsyncSession) -> list[str]:
+        result = await sql_session.execute(text("SELECT session_id FROM session_metadata ORDER BY created_at DESC"))
+        return [row[0] for row in result.fetchall()]
 
     return await _fetch()
