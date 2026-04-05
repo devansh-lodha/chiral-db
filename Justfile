@@ -10,7 +10,7 @@ verify: format lint type test
 # Run ACID integration tests against PostgreSQL
 test-acid:
     docker compose up -d postgres
-    uv run pytest tests/test_acid_properties.py -v
+    PYTHONPATH=src uv run pytest tests/test_acid_properties.py -v
 
 # Format code
 format:
