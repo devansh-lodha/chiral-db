@@ -178,7 +178,7 @@ async def show_example_queries(decomposition_plan: dict[str, Any]) -> None:
     typed_filter_op = "ne"
     typed_filter_value: Any = ""
 
-    if source_field and isinstance(typed_filter_field, str):
+    if source_field and isinstance(typed_filter_field, str) and isinstance(child_column_types, dict):
         inferred_type = child_column_types.get(typed_filter_field)
         if isinstance(inferred_type, str):
             normalized = inferred_type.strip().lower()

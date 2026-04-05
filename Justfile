@@ -7,6 +7,11 @@ setup:
 verify: format lint type test
     @echo "Checks passed."
 
+# Run ACID integration tests against PostgreSQL
+test-acid:
+    docker compose up -d postgres
+    PYTHONPATH=src uv run pytest tests/test_acid_properties.py -v
+
 # Format code
 format:
     uv run ruff format .
@@ -27,9 +32,20 @@ test:
 up:
     docker compose up -d
 
+# Build and run webapp dashboard in Docker
+webapp:
+    @echo "Building and starting dashboard container..."
+    docker compose --profile webapp up -d --build dashboard
+    @echo "Dashboard is running at: http://localhost:5173"
+
 # Stop database containers
 down:
     docker compose down
+
+# Stop only the webapp dashboard container
+webapp-stop:
+    docker compose --profile webapp stop dashboard
+    @echo "Dashboard stopped."
 
 # Clean temporary files
 clean:
@@ -111,3 +127,4 @@ stop-ports: stop
 
 # View logs
 logs:
+    docker compose logs -f

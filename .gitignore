@@ -215,3 +215,14 @@ mongo_data/
 
 #my works
 my works
+
+# Node.js & Vite WebApp
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*

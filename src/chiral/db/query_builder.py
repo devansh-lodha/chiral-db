@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,7 @@ class BuiltQuery:
 
     sql: str
     params: dict[str, Any]
+    inferred_joins: list[InferredJoin] | None = None
 
 
 @dataclass(frozen=True)
@@ -81,7 +83,7 @@ class CrudQueryBuilder:
             sql += " OFFSET :offset"
             params["offset"] = offset
 
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def build_insert(self, payload: dict[str, Any]) -> BuiltQuery:
         """Build an INSERT query from payload fields."""
@@ -100,7 +102,7 @@ class CrudQueryBuilder:
             params[key] = value
 
         sql = f'INSERT INTO "{self.table_name}" ({", ".join(columns)}) VALUES ({", ".join(binders)})'
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def build_update(
         self,
@@ -116,6 +118,25 @@ class CrudQueryBuilder:
         params: dict[str, Any] = {}
 
         for key, value in updates.items():
+            if key.startswith("overflow_data."):
+                path_parts = [part for part in key.split(".")[1:] if part]
+                if not path_parts:
+                    msg = "overflow_data update path cannot be empty"
+                    raise ValueError(msg)
+                for part in path_parts:
+                    _validate_identifier(part)
+
+                param_name = f"set_json_{'_'.join(path_parts)}"
+                path_literal = "{" + ",".join(path_parts) + "}"
+                set_clauses.append(
+                    '"overflow_data" = jsonb_set('
+                    "COALESCE(\"overflow_data\", '{}'::jsonb), "
+                    f"'{path_literal}', "
+                    f"CAST(:{param_name} AS jsonb), true)"
+                )
+                params[param_name] = json.dumps(value)
+                continue
+
             _validate_identifier(key)
             set_clauses.append(f'"{key}" = :set_{key}')
             params[f"set_{key}"] = value
@@ -126,7 +147,7 @@ class CrudQueryBuilder:
         sql = f'UPDATE "{self.table_name}" SET {", ".join(set_clauses)}'
         if where_sql:
             sql += f" WHERE {where_sql}"
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def build_delete(self, filters: list[dict[str, Any]] | None = None) -> BuiltQuery:
         """Build a DELETE query with optional filters."""
@@ -134,7 +155,7 @@ class CrudQueryBuilder:
         sql = f'DELETE FROM "{self.table_name}"'
         if where_sql:
             sql += f" WHERE {where_sql}"
-        return BuiltQuery(sql=sql, params=params)
+        return BuiltQuery(sql=sql, params=params, inferred_joins=self.inferred_joins)
 
     def _build_where_clause_for_write(self, filters: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
         clauses: list[str] = []

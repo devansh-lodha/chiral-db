@@ -53,6 +53,23 @@ def test_update_builder_generates_set_and_where() -> None:
     assert built.params["p_0"] == "s-01"
 
 
+def test_update_builder_generates_jsonb_set_for_overflow_data_path() -> None:
+    """Update query should use jsonb_set when updating overflow_data dotted fields."""
+    builder = CrudQueryBuilder()
+    built = builder.build_update(
+        updates={"overflow_data.city": "Ahmedabad"},
+        filters=[{"field": "session_id", "op": "eq", "value": "s-01"}],
+    )
+
+    assert built.sql.startswith('UPDATE "chiral_data" SET')
+    assert '"overflow_data" = jsonb_set(' in built.sql
+    assert "'{city}'" in built.sql
+    assert "CAST(:set_json_city AS jsonb)" in built.sql
+    assert '"session_id" = :p_0' in built.sql
+    assert built.params["set_json_city"] == '"Ahmedabad"'
+    assert built.params["p_0"] == "s-01"
+
+
 def test_translate_json_request_read() -> None:
     """Translation service should map read request to select query."""
     built = translate_json_request(
@@ -439,6 +456,45 @@ async def test_hydrate_request_with_decomposition_plan_from_metadata() -> None:
     assert isinstance(plan, dict)
     assert len(plan.get("entities", [])) == 1
     assert plan["entities"][0]["source_field"] == "comments"
+
+
+@pytest.mark.asyncio
+async def test_hydrate_request_rewrites_update_fields_for_jsonb_targets() -> None:
+    """Logical update keys should be rewritten to overflow_data paths when metadata target is JSONB."""
+
+    class DummyResult:
+        def __init__(self, row: tuple[Any, ...] | None) -> None:
+            self._row = row
+
+        def fetchone(self) -> tuple[Any, ...] | None:
+            return self._row
+
+    class DummySession:
+        async def execute(self, _statement: str, params: dict[str, Any]) -> DummyResult:
+            assert params["sid"] == "s1"
+            schema_json = {
+                "city": {"target": "jsonb", "type": "str"},
+                "username": {"target": "sql", "type": "str"},
+            }
+            return DummyResult((json.dumps(schema_json),))
+
+    request = {
+        "operation": "update",
+        "table": "chiral_data",
+        "updates": {"city": "Ahmedabad", "username": "deep_testing"},
+        "filters": [{"field": "session_id", "op": "eq", "value": "s1"}],
+    }
+
+    hydrated = await query_service._hydrate_request_with_decomposition_plan(
+        request,
+        cast("Any", DummySession()),
+    )
+
+    updates = hydrated.get("updates")
+    assert isinstance(updates, dict)
+    assert updates["overflow_data.city"] == "Ahmedabad"
+    assert updates["username"] == "deep_testing"
+    assert "city" not in updates
 
 
 @pytest.mark.asyncio
