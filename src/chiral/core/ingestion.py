@@ -7,12 +7,14 @@
 
 import json
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chiral.db.performance import calculate_rows_per_second
 from chiral.db.schema import init_metadata_table
 from chiral.db.sessions import session
 from chiral.utils.clock import MonotonicClock
@@ -39,6 +41,8 @@ async def ingest_data(
         Status dictionary.
 
     """
+    started = time.perf_counter()
+
     # Ensure metadata table exists (Idempotent)
     await init_metadata_table(sql_session)
 
@@ -124,10 +128,15 @@ async def ingest_data(
                 worker_triggered = True
                 incremental = True
 
+    elapsed_seconds = time.perf_counter() - started
+
     return {
         "status": "success",
         "session_id": session_id,
         "count": new_count,
         "worker_triggered": worker_triggered,
         "incremental": incremental,
+        "rows_processed": 1,
+        "elapsed_seconds": elapsed_seconds,
+        "rows_per_second": calculate_rows_per_second(1, elapsed_seconds),
     }

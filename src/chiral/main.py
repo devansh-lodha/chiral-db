@@ -5,6 +5,7 @@
 
 """Main Application Entry Point."""
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -116,18 +117,17 @@ async def execute_query_endpoint(request: QueryTranslateRequest) -> dict[str, An
 
 @app.get("/schema/logical/{session_id}")
 async def logical_schema_endpoint(session_id: str) -> list[str]:
-    """Returns a flat list of all queryable logical fields for the dashboard."""
+    """Endpoint to retrieve the logical schema (field names) for a given session, including nested fields from decomposition plans."""
+
     @session
     async def _fetch(sql_session: AsyncSession) -> list[str]:
         result = await sql_session.execute(
-            text("SELECT schema_json FROM session_metadata WHERE session_id = :sid"),
-            {"sid": session_id}
+            text("SELECT schema_json FROM session_metadata WHERE session_id = :sid"), {"sid": session_id}
         )
         row = result.fetchone()
         if not row or not row[0]:
             return ["username", "sys_ingested_at", "t_stamp", "session_id"]
 
-        import json
         schema_json = json.loads(row[0]) if isinstance(row[0], str) else row[0]
         fields = ["username", "sys_ingested_at", "t_stamp", "session_id"]
 
@@ -138,14 +138,14 @@ async def logical_schema_endpoint(session_id: str) -> list[str]:
                     source = entity.get("source_field")
                     if source and source not in fields:
                         fields.append(source)
-                    for child_col in entity.get("child_columns", []):
-                        fields.append(f"{source}.{child_col}")
+                    fields.extend(f"{source}.{child_col}" for child_col in entity.get("child_columns", []))
                 continue
 
             if key not in fields:
                 fields.append(key)
 
         return sorted(fields)
+
     return await _fetch()
 
 

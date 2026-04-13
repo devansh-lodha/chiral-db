@@ -90,11 +90,12 @@ async def add_foreign_key_safe(
         f'REFERENCES "{referenced_table}" ("{referenced_column}") ON DELETE {on_delete}'
     )
     try:
-        await session.execute(query)
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        logger.warning("Failed to add FK constraint %s", constraint_name)
+        # Isolate DDL failures so a single FK conflict does not rollback
+        # earlier CREATE TABLE/ALTER statements in the same session.
+        async with session.begin_nested():
+            await session.execute(query)
+    except Exception as exc:
+        logger.warning("Failed to add FK constraint %s: %s", constraint_name, exc)
 
 
 async def add_unique_constraint_safe(
@@ -111,11 +112,10 @@ async def add_unique_constraint_safe(
     logger.info("Adding UNIQUE constraint %s on %s.%s", constraint_name, table_name, column_name)
     query = text(f'ALTER TABLE "{table_name}" ADD CONSTRAINT "{constraint_name}" UNIQUE ("{column_name}")')
     try:
-        await session.execute(query)
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        logger.warning("Failed to add UNIQUE constraint %s", constraint_name)
+        async with session.begin_nested():
+            await session.execute(query)
+    except Exception as exc:
+        logger.warning("Failed to add UNIQUE constraint %s: %s", constraint_name, exc)
 
 
 async def add_index_safe(
@@ -134,8 +134,7 @@ async def add_index_safe(
 
     query = text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ("{column_name}")')
     try:
-        await session.execute(query)
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        logger.warning("Failed to add index %s", index_name)
+        async with session.begin_nested():
+            await session.execute(query)
+    except Exception as exc:
+        logger.warning("Failed to add index %s: %s", index_name, exc)

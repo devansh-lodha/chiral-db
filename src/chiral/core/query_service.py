@@ -729,7 +729,9 @@ def _rewrite_updates_for_jsonb_targets(
     schema: dict[str, Any],
 ) -> dict[str, Any]:
     plan = _extract_decomposition_plan_from_schema(schema)
-    child_entities = {e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")}
+    child_entities = {
+        e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")
+    }
 
     rewritten: dict[str, Any] = {}
     for key, value in updates.items():
@@ -757,7 +759,9 @@ def _rewrite_updates_for_jsonb_targets(
 
 def _rewrite_select_for_jsonb_targets(select_fields: list[str], schema: dict[str, Any]) -> list[str]:
     plan = _extract_decomposition_plan_from_schema(schema)
-    child_entities = {e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")}
+    child_entities = {
+        e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")
+    }
 
     rewritten = []
     for field in select_fields:
@@ -774,7 +778,9 @@ def _rewrite_select_for_jsonb_targets(select_fields: list[str], schema: dict[str
 
 def _rewrite_filters_for_jsonb_targets(filters: list[dict[str, Any]], schema: dict[str, Any]) -> list[dict[str, Any]]:
     plan = _extract_decomposition_plan_from_schema(schema)
-    child_entities = {e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")}
+    child_entities = {
+        e.get("source_field") for e in plan.get("entities", []) if isinstance(e, dict) and e.get("source_field")
+    }
 
     rewritten = []
     for f in filters:

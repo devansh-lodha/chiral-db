@@ -12,6 +12,10 @@ test-acid:
     docker compose up -d postgres
     PYTHONPATH=src uv run pytest tests/test_acid_properties.py -v
 
+# Run the hybrid database performance benchmark
+benchmark SESSION_ID SIZE='25' WORKLOAD='all':
+    uv run python scripts/performance_benchmark.py --session-id {{SESSION_ID}} --size {{SIZE}} --workload {{WORKLOAD}}
+
 # Format code
 format:
     uv run ruff format .

@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -19,11 +19,16 @@ from sqlalchemy.exc import IntegrityError
 
 from chiral.core.ingestion import ingest_data
 from chiral.core.query_service import CreateExecutionValidationError, execute_json_request
+from src.chiral.worker import migrator
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 pytestmark = pytest.mark.asyncio
+
+
+class SimulatedDatabaseCrashError(Exception):
+    """Raised to simulate a database crash during child insert."""
 
 
 class TestAcidProperties:
@@ -442,7 +447,6 @@ class TestAcidProperties:
         self, acid_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """If a child entity fails to insert during a synchronous nested create, the parent MUST roll back."""
-        from src.chiral.worker import migrator
 
         session_id = "acid_nested_atomicity"
         payload = {
@@ -466,9 +470,9 @@ class TestAcidProperties:
         # Force the child insert to fail by mocking _insert_dynamic_row to throw a DB error
         original_insert_dynamic = migrator._insert_dynamic_row
 
-        async def failing_child_insert(*args, **kwargs):
+        async def failing_child_insert(*args: Any, **kwargs: Any) -> Any:
             if "chiral_data_comments" in kwargs.get("table_name", ""):
-                raise Exception("Simulated database crash during child insert")
+                raise SimulatedDatabaseCrashError("Simulated database crash during child insert")
             return await original_insert_dynamic(*args, **kwargs)
 
         monkeypatch.setattr(migrator, "_insert_dynamic_row", failing_child_insert)
@@ -484,7 +488,7 @@ class TestAcidProperties:
 
         assert parent_count == 0, "Atomicity violated! Parent record persisted despite child insertion failure."
 
-    async def test_isolation_concurrent_jsonb_updates_prevent_lost_updates(self, acid_engine: AsyncEngine) -> None:
+    async def test_isolation_concurrent_jsonb_updates_prevent_lost_updates(self) -> None:
         """Concurrent updates to different keys within the same JSONB document must not overwrite each other (No Lost Updates)."""
         session_id = "acid_jsonb_isolation"
 
@@ -568,57 +572,60 @@ class TestAcidProperties:
         assert first_read == 1
         assert second_read == 1
 
-    async def test_consistency_cascading_deletes(self, acid_engine: AsyncEngine) -> None:
+    async def test_consistency_cascading_deletes1(self, acid_engine: AsyncEngine) -> None:
         """Prove that deleting a logical parent maintains system consistency by automatically purging physical child records."""
         session_id = "acid_consistency_cascade"
 
         # 1. Create a parent with nested child entities
-        await execute_json_request({
-            "operation": "create",
-            "table": "chiral_data",
-            "payload": {
-                "session_id": session_id,
-                "username": "cascade_user",
-                "comments": [{"text": "comment 1"}, {"text": "comment 2"}]
+        await execute_json_request(
+            {
+                "operation": "create",
+                "table": "chiral_data",
+                "payload": {
+                    "session_id": session_id,
+                    "username": "cascade_user",
+                    "comments": [{"text": "comment 1"}, {"text": "comment 2"}],
+                },
             }
-        })
+        )
 
         # 2. Execute logical delete on the parent
-        await execute_json_request({
-            "operation": "delete",
-            "table": "chiral_data",
-            "filters": [{"field": "username", "op": "eq", "value": "cascade_user"}]
-        })
+        await execute_json_request(
+            {
+                "operation": "delete",
+                "table": "chiral_data",
+                "filters": [{"field": "username", "op": "eq", "value": "cascade_user"}],
+            }
+        )
 
         # 3. Verify child records were purged consistently at the engine level
         async with acid_engine.connect() as conn:
             comments_count = await conn.scalar(
-                text("SELECT COUNT(*) FROM chiral_data_comments WHERE session_id = :sid"),
-                {"sid": session_id}
+                text("SELECT COUNT(*) FROM chiral_data_comments WHERE session_id = :sid"), {"sid": session_id}
             )
             assert comments_count == 0, "Consistency failed: Orphaned child records remained after parent deletion."
 
-    async def test_isolation_concurrent_crud_updates(self, acid_engine: AsyncEngine) -> None:
+    async def test_isolation_concurrent_crud_updates1(self, acid_engine: AsyncEngine) -> None:
         """Prove that concurrent logical updates to the same record are safely isolated and serialized."""
         session_id = "acid_isolation_update"
 
         # 1. Create base record
-        await execute_json_request({
-            "operation": "create",
-            "payload": {
-                "session_id": session_id,
-                "username": "race_condition_user",
-                "temperature": 0
+        await execute_json_request(
+            {
+                "operation": "create",
+                "payload": {"session_id": session_id, "username": "race_condition_user", "temperature": 0},
             }
-        })
+        )
 
         # 2. Fire 5 concurrent updates trying to set temperature to different values
         async def concurrent_update(val: int) -> None:
-            await execute_json_request({
-                "operation": "update",
-                "updates": {"temperature": val},
-                "filters": [{"field": "username", "op": "eq", "value": "race_condition_user"}]
-            })
+            await execute_json_request(
+                {
+                    "operation": "update",
+                    "updates": {"temperature": val},
+                    "filters": [{"field": "username", "op": "eq", "value": "race_condition_user"}],
+                }
+            )
 
         await asyncio.gather(*(concurrent_update(i) for i in range(1, 6)))
 
@@ -629,9 +636,8 @@ class TestAcidProperties:
             )
             assert final_temp in [1, 2, 3, 4, 5], "Isolation failed: Concurrent updates corrupted the integer state."
 
-    async def test_consistency_referential_integrity(self, acid_engine: AsyncEngine) -> None:
+    async def test_consistency_referential_integrity_parent(self, acid_engine: AsyncEngine) -> None:
         """Prove the system enforces Consistency by rejecting operations that violate relational constraints."""
-        from sqlalchemy.exc import IntegrityError
 
         # Attempt to insert a child record into chiral_data_comments pointing to a non-existent parent_id
         async with acid_engine.connect() as conn:
