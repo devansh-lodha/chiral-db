@@ -15,6 +15,7 @@ from chiral.worker.migrator import migrate_data, migrate_incremental
 
 logger = logging.getLogger(__name__)
 
+
 async def trigger_worker(session_id: str, *, incremental: bool = False, engine: AsyncEngine) -> None:
     """Orchestrate the worker analysis and migration."""
     logger.info("Worker triggered for session: %s (incremental=%s)", session_id, incremental)
@@ -53,32 +54,32 @@ async def trigger_worker(session_id: str, *, incremental: bool = False, engine: 
             except Exception:
                 logger.exception("Failed to reset status")
 
+
 async def flush_staging(session_id: str, engine: AsyncEngine) -> dict[str, int]:
     """Force migrate any remaining data in staging for a session."""
     logger.info("Flushing staging area for session: %s", session_id)
     session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
     count = 0
-    
+
     async with session_factory() as session:
         # Check if a schema already exists for this session
         result = await session.execute(
-            text("SELECT schema_json FROM session_metadata WHERE session_id = :sid"), 
-            {"sid": session_id}
+            text("SELECT schema_json FROM session_metadata WHERE session_id = :sid"), {"sid": session_id}
         )
         row = result.fetchone()
-        
+
         if not row or not row[0] or row[0] == "{}" or row[0] == "null":
             logger.info("No schema found during flush. Forcing early full analysis...")
             analysis_result = await analyze_staging(sql_session=session)
             await session.commit()
-            
+
             logger.info("Forcing early full migration...")
             await migrate_data(session_id=session_id, analysis=analysis_result, sql_session=session)
             await session.commit()
-            count = 1 # Marking that a full migration occurred
+            count = 1  # Marking that a full migration occurred
         else:
             count = await migrate_incremental(session_id=session_id, sql_session=session)
             await session.commit()
-            
+
     logger.info("Flush complete. Processed remaining records.")
     return {"flushed_count": count}

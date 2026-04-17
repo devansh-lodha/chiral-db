@@ -1,48 +1,111 @@
 {
   "coordination": {
-    "average_latency_seconds": 0.11578402500026641,
+    "average_latency_seconds": 0.017409228570094065,
     "backend_distribution": {
-      "child_fraction": 0.6666666666666666,
-      "child_rows": 2,
+      "child_fraction": 0.3333333333333333,
+      "child_rows": 1,
       "jsonb_fraction": 0.0,
       "jsonb_rows": 0,
-      "sql_fraction": 0.3333333333333333,
-      "sql_rows": 1,
+      "sql_fraction": 0.6666666666666666,
+      "sql_rows": 2,
       "total_rows": 3
     },
-    "metadata_lookups": 4,
+    "metadata_lookups": 7,
     "operation": "coordination",
-    "p50_latency_seconds": 0.09927465000055236,
-    "p95_latency_seconds": 0.17146549500075703,
+    "p50_latency_seconds": 0.005023100005928427,
+    "p95_latency_seconds": 0.05477395998605059,
     "phase": "logical_write",
-    "rows_inserted": 5,
-    "rows_processed": 4,
-    "runs": 4,
-    "throughput_ops_per_second": 8.636770055261934
+    "rows_inserted": 9,
+    "rows_processed": 10,
+    "runs": 7,
+    "throughput_ops_per_second": 57.440799055152894
   },
-  "ingestion_flat": {
-    "average_latency_seconds": 0.4418679999998858,
+  "ingestion_drift": {
+    "average_latency_seconds": 0.03812417900247965,
     "backend_distribution": {
       "child_fraction": 0.0,
       "child_rows": 0,
       "jsonb_fraction": 1.0,
-      "jsonb_rows": 1,
+      "jsonb_rows": 100,
       "sql_fraction": 0.0,
       "sql_rows": 0,
-      "total_rows": 1
+      "total_rows": 100
     },
     "metadata_lookups": 0,
     "operation": "ingestion",
-    "p50_latency_seconds": 0.4418679999998858,
-    "p95_latency_seconds": 0.4418679999998858,
+    "p50_latency_seconds": 0.03541409999888856,
+    "p95_latency_seconds": 0.055404704996908534,
+    "phase": "drift",
+    "rows_inserted": 100,
+    "rows_processed": 100,
+    "runs": 100,
+    "throughput_ops_per_second": 26.23007304458828
+  },
+  "ingestion_flat": {
+    "average_latency_seconds": 0.024678309998998883,
+    "backend_distribution": {
+      "child_fraction": 0.0,
+      "child_rows": 0,
+      "jsonb_fraction": 0.0,
+      "jsonb_rows": 0,
+      "sql_fraction": 1.0,
+      "sql_rows": 100,
+      "total_rows": 100
+    },
+    "metadata_lookups": 0,
+    "operation": "ingestion",
+    "p50_latency_seconds": 0.02295294999203179,
+    "p95_latency_seconds": 0.03919429501256672,
     "phase": "flat",
-    "rows_inserted": 1,
-    "rows_processed": 1,
-    "runs": 1,
-    "throughput_ops_per_second": 2.2631193025977407
+    "rows_inserted": 100,
+    "rows_processed": 100,
+    "runs": 100,
+    "throughput_ops_per_second": 40.52141333991536
+  },
+  "ingestion_mixed": {
+    "average_latency_seconds": 0.020406726997462103,
+    "backend_distribution": {
+      "child_fraction": 0.0,
+      "child_rows": 0,
+      "jsonb_fraction": 1.0,
+      "jsonb_rows": 100,
+      "sql_fraction": 0.0,
+      "sql_rows": 0,
+      "total_rows": 100
+    },
+    "metadata_lookups": 0,
+    "operation": "ingestion",
+    "p50_latency_seconds": 0.018750850009382702,
+    "p95_latency_seconds": 0.033942830002342814,
+    "phase": "mixed",
+    "rows_inserted": 100,
+    "rows_processed": 100,
+    "runs": 100,
+    "throughput_ops_per_second": 49.00344872180462
+  },
+  "ingestion_nested": {
+    "average_latency_seconds": 0.02872840300027747,
+    "backend_distribution": {
+      "child_fraction": 0.5,
+      "child_rows": 100,
+      "jsonb_fraction": 0.0,
+      "jsonb_rows": 0,
+      "sql_fraction": 0.5,
+      "sql_rows": 100,
+      "total_rows": 200
+    },
+    "metadata_lookups": 0,
+    "operation": "ingestion",
+    "p50_latency_seconds": 0.02559895000013057,
+    "p95_latency_seconds": 0.04749677999207051,
+    "phase": "nested",
+    "rows_inserted": 100,
+    "rows_processed": 100,
+    "runs": 100,
+    "throughput_ops_per_second": 34.808757033599875
   },
   "logical_execution": {
-    "average_latency_seconds": 0.15890304999993532,
+    "average_latency_seconds": 0.022837114287540317,
     "backend_distribution": {
       "child_fraction": 0.0,
       "child_rows": 0,
@@ -54,16 +117,16 @@
     },
     "metadata_lookups": 0,
     "operation": "logical_execution",
-    "p50_latency_seconds": 0.10593934999997145,
-    "p95_latency_seconds": 0.3120922199998858,
+    "p50_latency_seconds": 0.011249100003624335,
+    "p95_latency_seconds": 0.06011286000721156,
     "phase": "query",
     "rows_inserted": 0,
-    "rows_processed": 4,
-    "runs": 4,
-    "throughput_ops_per_second": 6.293145411623043
+    "rows_processed": 1364,
+    "runs": 7,
+    "throughput_ops_per_second": 43.78836955532465
   },
   "metadata_lookup": {
-    "average_latency_seconds": 0.003241499998694053,
+    "average_latency_seconds": 0.00036360000376589596,
     "backend_distribution": {
       "child_fraction": 0.0,
       "child_rows": 0,
@@ -75,12 +138,12 @@
     },
     "metadata_lookups": 1,
     "operation": "metadata_lookup",
-    "p50_latency_seconds": 0.003241499998694053,
-    "p95_latency_seconds": 0.003241499998694053,
+    "p50_latency_seconds": 0.00036360000376589596,
+    "p95_latency_seconds": 0.00036360000376589596,
     "phase": "hydration",
     "rows_inserted": 0,
     "rows_processed": 1,
     "runs": 1,
-    "throughput_ops_per_second": 308.49915175162226
+    "throughput_ops_per_second": 2750.2749990174657
   }
 }

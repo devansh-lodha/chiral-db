@@ -3,12 +3,12 @@
   "results": [
     {
       "comparison": {
-        "latency_overhead_percent": 353.93961662404246,
-        "latency_overhead_seconds": 0.032369760000437967,
-        "throughput_delta_ops_per_second": -85.25518209286703
+        "latency_overhead_percent": 13.36361188500231,
+        "latency_overhead_seconds": 0.00046135999145917577,
+        "throughput_delta_ops_per_second": -34.145549271307345
       },
       "direct": {
-        "average_latency_seconds": 0.009145559999524266,
+        "average_latency_seconds": 0.0034523600013926627,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -20,16 +20,16 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.008714300000065123,
-        "p95_latency_seconds": 0.011305659999925409,
+        "p50_latency_seconds": 0.0034493999846745282,
+        "p95_latency_seconds": 0.004088980000233278,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 125,
         "runs": 5,
-        "throughput_ops_per_second": 109.34267557722195
+        "throughput_ops_per_second": 289.65693021486913
       },
       "logical": {
-        "average_latency_seconds": 0.04151531999996223,
+        "average_latency_seconds": 0.0039137199928518385,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -41,25 +41,25 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.012652999999772874,
-        "p95_latency_seconds": 0.12877524000068657,
+        "p50_latency_seconds": 0.0038918999780435115,
+        "p95_latency_seconds": 0.0044934999838005755,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 125,
         "runs": 5,
-        "throughput_ops_per_second": 24.087493484354926
+        "throughput_ops_per_second": 255.5113809435618
       },
       "scenario": "user_read",
       "workload_size": 25
     },
     {
       "comparison": {
-        "latency_overhead_percent": 50.89132235221655,
-        "latency_overhead_seconds": 0.0036296200010838223,
-        "throughput_delta_ops_per_second": -47.28920874246424
+        "latency_overhead_percent": 68.6044299665633,
+        "latency_overhead_seconds": 0.0020253399852663283,
+        "throughput_delta_ops_per_second": -137.8279834886776
       },
       "direct": {
-        "average_latency_seconds": 0.007132099999216735,
+        "average_latency_seconds": 0.0029522000055294483,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -71,16 +71,16 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.006542799999806448,
-        "p95_latency_seconds": 0.009278279998761718,
+        "p50_latency_seconds": 0.0030722000228706747,
+        "p95_latency_seconds": 0.003876360016874969,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 125,
         "runs": 5,
-        "throughput_ops_per_second": 140.2111580193523
+        "throughput_ops_per_second": 338.7304376827476
       },
       "logical": {
-        "average_latency_seconds": 0.010761720000300557,
+        "average_latency_seconds": 0.004977539990795777,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -92,25 +92,25 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.010916299999735202,
-        "p95_latency_seconds": 0.01366846000055375,
+        "p50_latency_seconds": 0.00470849999692291,
+        "p95_latency_seconds": 0.007095939991995692,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 125,
         "runs": 5,
-        "throughput_ops_per_second": 92.92194927688806
+        "throughput_ops_per_second": 200.90245419407
       },
       "scenario": "nested_read",
       "workload_size": 25
     },
     {
       "comparison": {
-        "latency_overhead_percent": -0.5937394451883132,
-        "latency_overhead_seconds": -7.452000027114922e-05,
-        "throughput_delta_ops_per_second": 0.4758885108175548
+        "latency_overhead_percent": -39.5425532528915,
+        "latency_overhead_seconds": -0.006453059980412944,
+        "throughput_delta_ops_per_second": 40.078726417713135
       },
       "direct": {
-        "average_latency_seconds": 0.012550960000226041,
+        "average_latency_seconds": 0.016319279989693312,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -122,16 +122,16 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.011317700000290642,
-        "p95_latency_seconds": 0.017418880000332135,
+        "p50_latency_seconds": 0.017283799999859184,
+        "p95_latency_seconds": 0.018833859986625612,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 79.67518022382274
+        "throughput_ops_per_second": 61.277213249087275
       },
       "logical": {
-        "average_latency_seconds": 0.012476439999954892,
+        "average_latency_seconds": 0.009866220009280368,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -143,25 +143,76 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.011606500000198139,
-        "p95_latency_seconds": 0.01623788000033528,
+        "p50_latency_seconds": 0.010210900014499202,
+        "p95_latency_seconds": 0.01109296000795439,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 80.15106873464029
+        "throughput_ops_per_second": 101.35593966680041
       },
       "scenario": "multi_entity_update",
       "workload_size": 25
     },
     {
       "comparison": {
-        "latency_overhead_percent": 365.99442105100115,
-        "latency_overhead_seconds": 0.030833200000779472,
-        "throughput_delta_ops_per_second": -93.2286968022632
+        "latency_overhead_percent": 21.53465166558714,
+        "latency_overhead_seconds": 0.0005530400027055292,
+        "throughput_delta_ops_per_second": -68.99522509266859
       },
       "direct": {
-        "average_latency_seconds": 0.00842449999981909,
+        "average_latency_seconds": 0.0025681399973109366,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.002229899982921779,
+        "p95_latency_seconds": 0.0036445999983698127,
+        "phase": "direct",
+        "rows_inserted": 0,
+        "rows_processed": 125,
+        "runs": 5,
+        "throughput_ops_per_second": 389.38687183996433
+      },
+      "logical": {
+        "average_latency_seconds": 0.003121180000016466,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.0029725999920628965,
+        "p95_latency_seconds": 0.0036329399968963116,
+        "phase": "logical",
+        "rows_inserted": 0,
+        "rows_processed": 125,
+        "runs": 5,
+        "throughput_ops_per_second": 320.39164674729574
+      },
+      "scenario": "jsonb_drift_read",
+      "workload_size": 25
+    },
+    {
+      "comparison": {
+        "latency_overhead_percent": 39.89297183186462,
+        "latency_overhead_seconds": 0.0010063800029456614,
+        "throughput_delta_ops_per_second": -113.04071238538711
+      },
+      "direct": {
+        "average_latency_seconds": 0.0025227000063750894,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -173,16 +224,16 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.00843459999850893,
-        "p95_latency_seconds": 0.009943559999373974,
+        "p50_latency_seconds": 0.002564499998698011,
+        "p95_latency_seconds": 0.003260720014804974,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 250,
         "runs": 5,
-        "throughput_ops_per_second": 118.70140661421736
+        "throughput_ops_per_second": 396.4006808074326
       },
       "logical": {
-        "average_latency_seconds": 0.03925770000059856,
+        "average_latency_seconds": 0.0035290800093207507,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -194,25 +245,25 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.01112450000073295,
-        "p95_latency_seconds": 0.1244814400000905,
+        "p50_latency_seconds": 0.0035547000006772578,
+        "p95_latency_seconds": 0.00452094001811929,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 250,
         "runs": 5,
-        "throughput_ops_per_second": 25.472709811954164
+        "throughput_ops_per_second": 283.3599684220455
       },
       "scenario": "user_read",
       "workload_size": 50
     },
     {
       "comparison": {
-        "latency_overhead_percent": 40.69143944962165,
-        "latency_overhead_seconds": 0.0026014200004283346,
-        "throughput_delta_ops_per_second": -45.24055857659296
+        "latency_overhead_percent": 20.32453149984776,
+        "latency_overhead_seconds": 0.0005658999958541243,
+        "throughput_delta_ops_per_second": -60.66625926993589
       },
       "direct": {
-        "average_latency_seconds": 0.006393039999602479,
+        "average_latency_seconds": 0.0027843200019560753,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -224,16 +275,16 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.006320399999822257,
-        "p95_latency_seconds": 0.007543999999688821,
+        "p50_latency_seconds": 0.0023311999975703657,
+        "p95_latency_seconds": 0.0036443199962377546,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 250,
         "runs": 5,
-        "throughput_ops_per_second": 156.42010687594325
+        "throughput_ops_per_second": 359.1541199637497
       },
       "logical": {
-        "average_latency_seconds": 0.008994460000030813,
+        "average_latency_seconds": 0.0033502199978101997,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -245,25 +296,25 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.00876569999854837,
-        "p95_latency_seconds": 0.010195480000402313,
+        "p50_latency_seconds": 0.0033158999867737293,
+        "p95_latency_seconds": 0.003636599989840761,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 250,
         "runs": 5,
-        "throughput_ops_per_second": 111.17954829935029
+        "throughput_ops_per_second": 298.4878606938138
       },
       "scenario": "nested_read",
       "workload_size": 50
     },
     {
       "comparison": {
-        "latency_overhead_percent": -3.125697089687075,
-        "latency_overhead_seconds": -0.00041475999933027197,
-        "throughput_delta_ops_per_second": 2.4315786485776982
+        "latency_overhead_percent": -54.57946400902549,
+        "latency_overhead_seconds": -0.012281339993933216,
+        "throughput_delta_ops_per_second": 53.402369023808205
       },
       "direct": {
-        "average_latency_seconds": 0.013269359999685548,
+        "average_latency_seconds": 0.022501759987790138,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -275,16 +326,16 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.011177599999427912,
-        "p95_latency_seconds": 0.018741640000007463,
+        "p50_latency_seconds": 0.016751499992096797,
+        "p95_latency_seconds": 0.04579863998224026,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 75.36158488606064
+        "throughput_ops_per_second": 44.440968197270706
       },
       "logical": {
-        "average_latency_seconds": 0.012854600000355276,
+        "average_latency_seconds": 0.010220419993856922,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -296,25 +347,76 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.013274700000692974,
-        "p95_latency_seconds": 0.015383560000918806,
+        "p50_latency_seconds": 0.010631799988914281,
+        "p95_latency_seconds": 0.011956080002710224,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 77.79316353463834
+        "throughput_ops_per_second": 97.84333722107891
       },
       "scenario": "multi_entity_update",
       "workload_size": 50
     },
     {
       "comparison": {
-        "latency_overhead_percent": 301.468278808916,
-        "latency_overhead_seconds": 0.028987200000119628,
-        "throughput_delta_ops_per_second": -78.09545144094173
+        "latency_overhead_percent": 43.04563084246008,
+        "latency_overhead_seconds": 0.0017336799995973711,
+        "throughput_delta_ops_per_second": -74.71617272029641
       },
       "direct": {
-        "average_latency_seconds": 0.009615340000163997,
+        "average_latency_seconds": 0.004027539998060092,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.0039376000058837235,
+        "p95_latency_seconds": 0.004962679999880493,
+        "phase": "direct",
+        "rows_inserted": 0,
+        "rows_processed": 250,
+        "runs": 5,
+        "throughput_ops_per_second": 248.29051989096587
+      },
+      "logical": {
+        "average_latency_seconds": 0.005761219997657463,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.005655499990098178,
+        "p95_latency_seconds": 0.00759583999752067,
+        "phase": "logical",
+        "rows_inserted": 0,
+        "rows_processed": 250,
+        "runs": 5,
+        "throughput_ops_per_second": 173.57434717066945
+      },
+      "scenario": "jsonb_drift_read",
+      "workload_size": 50
+    },
+    {
+      "comparison": {
+        "latency_overhead_percent": 22.958304207952246,
+        "latency_overhead_seconds": 0.0006738400028552861,
+        "throughput_delta_ops_per_second": -63.615794860657275
+      },
+      "direct": {
+        "average_latency_seconds": 0.0029350599972531198,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -326,16 +428,16 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.008873299999322626,
-        "p95_latency_seconds": 0.012106480000875308,
+        "p50_latency_seconds": 0.0029463999962899834,
+        "p95_latency_seconds": 0.0039431000011973085,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 500,
         "runs": 5,
-        "throughput_ops_per_second": 104.00048256046529
+        "throughput_ops_per_second": 340.7085377933962
       },
       "logical": {
-        "average_latency_seconds": 0.038602540000283625,
+        "average_latency_seconds": 0.003608900000108406,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -347,25 +449,25 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.011711700000887504,
-        "p95_latency_seconds": 0.11927417999977476,
+        "p50_latency_seconds": 0.0033758000063244253,
+        "p95_latency_seconds": 0.004634119989350438,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 500,
         "runs": 5,
-        "throughput_ops_per_second": 25.905031119523553
+        "throughput_ops_per_second": 277.09274293273893
       },
       "scenario": "user_read",
       "workload_size": 100
     },
     {
       "comparison": {
-        "latency_overhead_percent": 42.69180275769088,
-        "latency_overhead_seconds": 0.0029656800004886465,
-        "throughput_delta_ops_per_second": -43.069087966581336
+        "latency_overhead_percent": 13.660345738737872,
+        "latency_overhead_seconds": 0.0004443000128958375,
+        "throughput_delta_ops_per_second": -36.95201146986341
       },
       "direct": {
-        "average_latency_seconds": 0.006946719999905327,
+        "average_latency_seconds": 0.0032524799986276775,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -377,16 +479,16 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.007180300000982243,
-        "p95_latency_seconds": 0.007638159999623894,
+        "p50_latency_seconds": 0.003262299986090511,
+        "p95_latency_seconds": 0.003680860000895336,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 500,
         "runs": 5,
-        "throughput_ops_per_second": 143.95282953877924
+        "throughput_ops_per_second": 307.45769395105617
       },
       "logical": {
-        "average_latency_seconds": 0.009912400000393973,
+        "average_latency_seconds": 0.003696780011523515,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -398,25 +500,25 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.01012290000107896,
-        "p95_latency_seconds": 0.012175939999724505,
+        "p50_latency_seconds": 0.003700800007209182,
+        "p95_latency_seconds": 0.004339680017437786,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 500,
         "runs": 5,
-        "throughput_ops_per_second": 100.8837415721979
+        "throughput_ops_per_second": 270.50568248119276
       },
       "scenario": "nested_read",
       "workload_size": 100
     },
     {
       "comparison": {
-        "latency_overhead_percent": -4.994927550306881,
-        "latency_overhead_seconds": -0.000659760000417009,
-        "throughput_delta_ops_per_second": 3.980389861067394
+        "latency_overhead_percent": -31.52187203174116,
+        "latency_overhead_seconds": -0.0038165800040587776,
+        "throughput_delta_ops_per_second": 38.01874296034521
       },
       "direct": {
-        "average_latency_seconds": 0.013208600000143633,
+        "average_latency_seconds": 0.012107719999039545,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -428,16 +530,16 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.012325700001383666,
-        "p95_latency_seconds": 0.016253039999719474,
+        "p50_latency_seconds": 0.012034700019285083,
+        "p95_latency_seconds": 0.013142579997656867,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 75.7082506843364
+        "throughput_ops_per_second": 82.59193308726381
       },
       "logical": {
-        "average_latency_seconds": 0.012548839999726624,
+        "average_latency_seconds": 0.008291139994980767,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -449,25 +551,76 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.012132099998780177,
-        "p95_latency_seconds": 0.015208159999747294,
+        "p50_latency_seconds": 0.008112100011203438,
+        "p95_latency_seconds": 0.009195339999860153,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 79.6886405454038
+        "throughput_ops_per_second": 120.61067604760902
       },
       "scenario": "multi_entity_update",
       "workload_size": 100
     },
     {
       "comparison": {
-        "latency_overhead_percent": 314.8636103315526,
-        "latency_overhead_seconds": 0.03296622000052594,
-        "throughput_delta_ops_per_second": -72.48872262146068
+        "latency_overhead_percent": 47.343500516262566,
+        "latency_overhead_seconds": 0.0015578000107780094,
+        "throughput_delta_ops_per_second": -97.65130375377947
       },
       "direct": {
-        "average_latency_seconds": 0.010469999999622814,
+        "average_latency_seconds": 0.0032904200023040177,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.0031971000134944916,
+        "p95_latency_seconds": 0.0038896400132216514,
+        "phase": "direct",
+        "rows_inserted": 0,
+        "rows_processed": 500,
+        "runs": 5,
+        "throughput_ops_per_second": 303.91257021893256
+      },
+      "logical": {
+        "average_latency_seconds": 0.004848220013082027,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.004404400009661913,
+        "p95_latency_seconds": 0.006517640023957938,
+        "phase": "logical",
+        "rows_inserted": 0,
+        "rows_processed": 500,
+        "runs": 5,
+        "throughput_ops_per_second": 206.26126646515308
+      },
+      "scenario": "jsonb_drift_read",
+      "workload_size": 100
+    },
+    {
+      "comparison": {
+        "latency_overhead_percent": 45.82139356236405,
+        "latency_overhead_seconds": 0.0017877399979624896,
+        "throughput_delta_ops_per_second": -80.539881296653
+      },
+      "direct": {
+        "average_latency_seconds": 0.0039015399990603326,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -479,16 +632,16 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.010438799999974435,
-        "p95_latency_seconds": 0.013710939999509718,
+        "p50_latency_seconds": 0.0039262000063899904,
+        "p95_latency_seconds": 0.004301179992035031,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 1000,
         "runs": 5,
-        "throughput_ops_per_second": 95.51098376657357
+        "throughput_ops_per_second": 256.30904725847876
       },
       "logical": {
-        "average_latency_seconds": 0.043436220000148754,
+        "average_latency_seconds": 0.005689279997022822,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -500,25 +653,25 @@
         },
         "metadata_lookups": 0,
         "operation": "user_read",
-        "p50_latency_seconds": 0.012151400000220747,
-        "p95_latency_seconds": 0.13792798000067702,
+        "p50_latency_seconds": 0.005472099990583956,
+        "p95_latency_seconds": 0.007108979998156428,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 1000,
         "runs": 5,
-        "throughput_ops_per_second": 23.02226114511289
+        "throughput_ops_per_second": 175.76916596182576
       },
       "scenario": "user_read",
       "workload_size": 200
     },
     {
       "comparison": {
-        "latency_overhead_percent": 62.86754158158442,
-        "latency_overhead_seconds": 0.0040316200003871925,
-        "throughput_delta_ops_per_second": -60.19200687545809
+        "latency_overhead_percent": 46.54338597652614,
+        "latency_overhead_seconds": 0.0019652200047858056,
+        "throughput_delta_ops_per_second": -75.22090439332624
       },
       "direct": {
-        "average_latency_seconds": 0.006412879999697907,
+        "average_latency_seconds": 0.004222340002888814,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -530,16 +683,16 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.006179599999086349,
-        "p95_latency_seconds": 0.007962000000770787,
+        "p50_latency_seconds": 0.004281300003640354,
+        "p95_latency_seconds": 0.005003159999614581,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 1000,
         "runs": 5,
-        "throughput_ops_per_second": 155.93617844823345
+        "throughput_ops_per_second": 236.83549863720742
       },
       "logical": {
-        "average_latency_seconds": 0.0104445000000851,
+        "average_latency_seconds": 0.0061875600076746196,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -551,25 +704,25 @@
         },
         "metadata_lookups": 0,
         "operation": "nested_read",
-        "p50_latency_seconds": 0.00959559999864723,
-        "p95_latency_seconds": 0.01351956000107748,
+        "p50_latency_seconds": 0.006191799999214709,
+        "p95_latency_seconds": 0.007386600016616285,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 1000,
         "runs": 5,
-        "throughput_ops_per_second": 95.74417157277536
+        "throughput_ops_per_second": 161.61459424388119
       },
       "scenario": "nested_read",
       "workload_size": 200
     },
     {
       "comparison": {
-        "latency_overhead_percent": 6.1422025652573184,
-        "latency_overhead_seconds": 0.0006104600000981005,
-        "throughput_delta_ops_per_second": -5.822412387397648
+        "latency_overhead_percent": -29.72898511374971,
+        "latency_overhead_seconds": -0.004963260010117666,
+        "throughput_delta_ops_per_second": 25.340601191097853
       },
       "direct": {
-        "average_latency_seconds": 0.009938779999720282,
+        "average_latency_seconds": 0.01669501999858767,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -581,16 +734,16 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.008798400000159745,
-        "p95_latency_seconds": 0.013185859998702653,
+        "p50_latency_seconds": 0.01665619999403134,
+        "p95_latency_seconds": 0.017294140002923085,
         "phase": "direct",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 100.61597097713644
+        "throughput_ops_per_second": 59.89810135505055
       },
       "logical": {
-        "average_latency_seconds": 0.010549239999818383,
+        "average_latency_seconds": 0.011731759988470003,
         "backend_distribution": {
           "child_fraction": 0.0,
           "child_rows": 0,
@@ -602,15 +755,66 @@
         },
         "metadata_lookups": 0,
         "operation": "multi_entity_update",
-        "p50_latency_seconds": 0.010028200000306242,
-        "p95_latency_seconds": 0.014081759999680797,
+        "p50_latency_seconds": 0.012236299982760102,
+        "p95_latency_seconds": 0.01238997999462299,
         "phase": "logical",
         "rows_inserted": 0,
         "rows_processed": 5,
         "runs": 5,
-        "throughput_ops_per_second": 94.7935585897388
+        "throughput_ops_per_second": 85.2387025461484
       },
       "scenario": "multi_entity_update",
+      "workload_size": 200
+    },
+    {
+      "comparison": {
+        "latency_overhead_percent": 11.987031784400953,
+        "latency_overhead_seconds": 0.0006374200049322097,
+        "throughput_delta_ops_per_second": -20.129356459440487
+      },
+      "direct": {
+        "average_latency_seconds": 0.005317580001428723,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.004518200003076345,
+        "p95_latency_seconds": 0.007034100004239008,
+        "phase": "direct",
+        "rows_inserted": 0,
+        "rows_processed": 1000,
+        "runs": 5,
+        "throughput_ops_per_second": 188.05546879056277
+      },
+      "logical": {
+        "average_latency_seconds": 0.005955000006360933,
+        "backend_distribution": {
+          "child_fraction": 0.0,
+          "child_rows": 0,
+          "jsonb_fraction": 0.0,
+          "jsonb_rows": 0,
+          "sql_fraction": 0.0,
+          "sql_rows": 0,
+          "total_rows": 0
+        },
+        "metadata_lookups": 0,
+        "operation": "jsonb_drift_read",
+        "p50_latency_seconds": 0.0054301000200212,
+        "p95_latency_seconds": 0.007360560004599392,
+        "phase": "logical",
+        "rows_inserted": 0,
+        "rows_processed": 1000,
+        "runs": 5,
+        "throughput_ops_per_second": 167.92611233112228
+      },
+      "scenario": "jsonb_drift_read",
       "workload_size": 200
     }
   ],
@@ -622,8 +826,8 @@
     200
   ],
   "summary": {
-    "direct_average_latency_seconds": 0.00945898666644401,
-    "logical_average_latency_seconds": 0.020946165000138236
+    "direct_average_latency_seconds": 0.0068031537492061036,
+    "logical_average_latency_seconds": 0.005921765000675805
   },
   "trials": 5
 }

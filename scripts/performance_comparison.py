@@ -34,11 +34,12 @@ SCENARIO_LABELS: dict[str, str] = {
     "user_read": "flat_user_read",
     "nested_read": "highly_nested_read",
     "multi_entity_update": "multi_entity_update",
+    "jsonb_drift_read": "jsonb_drift_read",
 }
 
 PROFILE_SCENARIOS: dict[str, list[str]] = {
-    "full": ["user_read", "nested_read", "multi_entity_update"],
-    "domain": ["nested_read", "multi_entity_update"],
+    "full": ["user_read", "nested_read", "multi_entity_update", "jsonb_drift_read"],
+    "domain": ["nested_read", "multi_entity_update", "jsonb_drift_read"],
 }
 
 
@@ -70,6 +71,7 @@ class ScenarioResult:
                 "throughput_delta_ops_per_second": throughput_delta,
             },
         }
+
 
 def _parse_sizes(value: str) -> list[int]:
     sizes: list[int] = []
@@ -174,6 +176,17 @@ def _build_logical_multi_entity_update_request(session_id: str, size: int) -> di
     }
 
 
+def _build_logical_jsonb_drift_read_request(session_id: str, size: int) -> dict[str, Any]:
+    return {
+        "operation": "read",
+        "table": "chiral_data",
+        "session_id": session_id,
+        "select": ["username", "overflow_data.profile", "overflow_data.attributes", "overflow_data.temperature"],
+        "filters": [{"field": "session_id", "op": "eq", "value": session_id}],
+        "limit": size,
+    }
+
+
 def _build_direct_user_read_sql() -> str:
     return (
         'SELECT "username", "sys_ingested_at", "t_stamp" '
@@ -209,6 +222,59 @@ def _build_direct_multi_entity_update_statements(session_id: str, size: int) -> 
             {"session_id": session_id, "profile": profile_value},
         ),
     ]
+
+
+def _build_direct_jsonb_drift_read_sql() -> str:
+    return (
+        'SELECT "username", '
+        '"overflow_data"->\'profile\' AS "profile", '
+        '"overflow_data"->\'attributes\' AS "attributes", '
+        '"overflow_data"->>\'temperature\' AS "temperature" '
+        'FROM "chiral_data" '
+        'WHERE "session_id" = :session_id '
+        'ORDER BY "id" ASC '
+        "LIMIT :limit"
+    )
+
+
+def _build_drift_heavy_record(index: int, *, session_id: str) -> dict[str, Any]:
+    # Purposefully vary nested and scalar types to force JSONB-heavy storage behavior.
+    profile_value: Any
+    if index % 3 == 0:
+        profile_value = {"city": f"city_{index % 5}", "zip": 10000 + index, "active": index % 2 == 0}
+    elif index % 3 == 1:
+        profile_value = f"profile_as_string_{index}"
+    else:
+        profile_value = {"city": f"city_{index % 7}", "codes": [index, index + 1, index + 2]}
+
+    temperature_value: Any = index if index % 2 == 0 else f"temp_{index}"
+    if index % 5 == 0:
+        temperature_value = {"value": index, "unit": "C"}
+
+    return {
+        "session_id": session_id,
+        "username": f"jsonb_user_{index}",
+        "temperature": temperature_value,
+        "profile": profile_value,
+        "attributes": {
+            "tags": ["alpha", "beta", index],
+            "flags": {"verified": index % 2 == 0, "score": index / 10},
+            "history": [{"step": "ingest", "idx": index}, "raw_event"],
+        },
+        "events": [{"kind": "click", "value": index}, "mixed_payload", index],
+        "t_stamp": float(index),
+    }
+
+
+async def _prepare_session_with_drift_data(client: ChiralClient, session_id: str, size: int) -> None:
+    seed_size = max(120, size)
+    async with client.session_factory() as session, session.begin():
+        await session.execute(text('DELETE FROM "session_metadata" WHERE "session_id" = :sid'), {"sid": session_id})
+
+    for index in range(seed_size):
+        await client.ingest(session_id=session_id, data=_build_drift_heavy_record(index, session_id=session_id))
+
+    await client.flush(session_id)
 
 
 async def _measure_operation(
@@ -319,6 +385,15 @@ async def _run_logical_multi_entity_update(client: ChiralClient, session_id: str
     return await _measure_operation(operation="multi_entity_update", phase="logical", func=_execute, rows_processed=1)
 
 
+async def _run_logical_jsonb_drift_read(client: ChiralClient, session_id: str, size: int) -> OperationTiming:
+    request = _build_logical_jsonb_drift_read_request(session_id, size)
+
+    async def _execute() -> dict[str, Any]:
+        return await client.query(request)
+
+    return await _measure_operation(operation="jsonb_drift_read", phase="logical", func=_execute, rows_processed=size)
+
+
 async def _run_direct_multi_entity_update(client: ChiralClient, session_id: str, size: int) -> OperationTiming:
     statements = _build_direct_multi_entity_update_statements(session_id, size)
 
@@ -329,6 +404,19 @@ async def _run_direct_multi_entity_update(client: ChiralClient, session_id: str,
 
     return await _measure_operation(
         operation="multi_entity_update", phase="direct_sql_transaction", func=_execute, rows_processed=1
+    )
+
+
+async def _run_direct_jsonb_drift_read(client: ChiralClient, session_id: str, size: int) -> OperationTiming:
+    sql = _build_direct_jsonb_drift_read_sql()
+
+    async def _execute() -> list[dict[str, Any]]:
+        async with client.session_factory() as session:
+            result = await session.execute(text(sql), {"session_id": session_id, "limit": size})
+            return [dict(row) for row in result.mappings().all()]
+
+    return await _measure_operation(
+        operation="jsonb_drift_read", phase="direct_jsonb", func=_execute, rows_processed=size
     )
 
 
@@ -440,6 +528,11 @@ def _get_scenario_runners(profile: str) -> list[tuple[str, Callable[..., Any], C
             _run_logical_multi_entity_update,
             _run_direct_multi_entity_update,
         ),
+        "jsonb_drift_read": (
+            "jsonb_drift_read",
+            _run_logical_jsonb_drift_read,
+            _run_direct_jsonb_drift_read,
+        ),
     }
     return [all_runners[scenario] for scenario in selected_scenarios]
 
@@ -449,6 +542,7 @@ async def _run_for_size(session_id: str, size: int, trials: int, *, profile: str
     results: list[ScenarioResult] = []
 
     async with ChiralClient(settings.database_url) as client:
+        await _prepare_session_with_drift_data(client, session_id, size)
         for scenario_name, logical_runner, direct_runner in _get_scenario_runners(profile):
             logical_timings: list[OperationTiming] = []
             direct_timings: list[OperationTiming] = []

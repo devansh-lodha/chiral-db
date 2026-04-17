@@ -139,7 +139,7 @@ if __name__ == "__main__":
     elif cmd == "wait":
         if not wait_for_db():
             sys.exit(1)
-        if not wait_for_url("http://127.0.0.1:8000/", label="Chiral API"):
+        if not wait_for_url("http://127.0.0.1:8000/api/health", label="Chiral API"):
             sys.exit(1)
         if not wait_for_url("http://127.0.0.1:8001/health", label="Simulation"):
             sys.exit(1)

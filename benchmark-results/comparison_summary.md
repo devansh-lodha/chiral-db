@@ -1,22 +1,26 @@
 # Performance Comparison Summary
 
 Profile: Full profile (includes flat user reads)
-Logical average latency: 0.0209 s
-Direct average latency: 0.0095 s
-Logical latency wins: 3/12
-Logical throughput wins: 3/12
+Logical average latency: 0.0059 s
+Direct average latency: 0.0068 s
+Logical latency wins: 4/16
+Logical throughput wins: 4/16
 
 | Scenario | Size | Logical avg (s) | Direct avg (s) | Overhead (s) | Overhead (%) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| flat_user_read | 25 | 0.0415 | 0.0091 | 0.0324 | 353.9396 |
-| highly_nested_read | 25 | 0.0108 | 0.0071 | 0.0036 | 50.8913 |
-| multi_entity_update | 25 | 0.0125 | 0.0126 | -0.0001 | -0.5937 |
-| flat_user_read | 50 | 0.0393 | 0.0084 | 0.0308 | 365.9944 |
-| highly_nested_read | 50 | 0.0090 | 0.0064 | 0.0026 | 40.6914 |
-| multi_entity_update | 50 | 0.0129 | 0.0133 | -0.0004 | -3.1257 |
-| flat_user_read | 100 | 0.0386 | 0.0096 | 0.0290 | 301.4683 |
-| highly_nested_read | 100 | 0.0099 | 0.0069 | 0.0030 | 42.6918 |
-| multi_entity_update | 100 | 0.0125 | 0.0132 | -0.0007 | -4.9949 |
-| flat_user_read | 200 | 0.0434 | 0.0105 | 0.0330 | 314.8636 |
-| highly_nested_read | 200 | 0.0104 | 0.0064 | 0.0040 | 62.8675 |
-| multi_entity_update | 200 | 0.0105 | 0.0099 | 0.0006 | 6.1422 |
+| flat_user_read | 25 | 0.0039 | 0.0035 | 0.0005 | 13.3636 |
+| highly_nested_read | 25 | 0.0050 | 0.0030 | 0.0020 | 68.6044 |
+| multi_entity_update | 25 | 0.0099 | 0.0163 | -0.0065 | -39.5426 |
+| jsonb_drift_read | 25 | 0.0031 | 0.0026 | 0.0006 | 21.5347 |
+| flat_user_read | 50 | 0.0035 | 0.0025 | 0.0010 | 39.8930 |
+| highly_nested_read | 50 | 0.0034 | 0.0028 | 0.0006 | 20.3245 |
+| multi_entity_update | 50 | 0.0102 | 0.0225 | -0.0123 | -54.5795 |
+| jsonb_drift_read | 50 | 0.0058 | 0.0040 | 0.0017 | 43.0456 |
+| flat_user_read | 100 | 0.0036 | 0.0029 | 0.0007 | 22.9583 |
+| highly_nested_read | 100 | 0.0037 | 0.0033 | 0.0004 | 13.6603 |
+| multi_entity_update | 100 | 0.0083 | 0.0121 | -0.0038 | -31.5219 |
+| jsonb_drift_read | 100 | 0.0048 | 0.0033 | 0.0016 | 47.3435 |
+| flat_user_read | 200 | 0.0057 | 0.0039 | 0.0018 | 45.8214 |
+| highly_nested_read | 200 | 0.0062 | 0.0042 | 0.0020 | 46.5434 |
+| multi_entity_update | 200 | 0.0117 | 0.0167 | -0.0050 | -29.7290 |
+| jsonb_drift_read | 200 | 0.0060 | 0.0053 | 0.0006 | 11.9870 |
